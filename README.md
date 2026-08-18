@@ -180,7 +180,7 @@ Current development focuses on:
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/03-17.git
+git clone https://github.com/2312758-NguyenHongPhucTho/0317Game3D/tree/main
 ```
 
 Open **Unity Hub → Add → Select the project folder**.
