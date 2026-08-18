@@ -142,7 +142,7 @@ The player must investigate the surroundings and uncover what happened at **03:1
 * **Lương Hữu Thiện**
 * **Nguyễn Hồng Phúc Thọ**
 * **Hoàng Bình Quân**
-
+* **Nguyễn Minh Long**
 ---
 
 ## 🚧 Development Status
