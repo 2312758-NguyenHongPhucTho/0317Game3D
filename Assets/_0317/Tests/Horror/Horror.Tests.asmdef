@@ -1,0 +1,5 @@
+{
+    "name": "Game0317.Horror.Tests",
+    "includePlatforms": ["Editor"],
+    "optionalUnityReferences": ["TestAssemblies"]
+}
