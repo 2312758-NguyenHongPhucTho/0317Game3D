@@ -1,3 +1,4 @@
+
 namespace FpsHorrorKit
 {
     using UnityEngine;
@@ -11,52 +12,90 @@ namespace FpsHorrorKit
         private float startFocusDistance;
 
         public static InteractCameraSettings Instance;
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
             {
                 Destroy(this);
-            }
-            else
-            {
-                Instance = this;
+                return;
             }
 
-            // Sahnedeki Volume bileşenini al
-            volume = FindAnyObjectByType<Volume>();
+            Instance = this;
 
-            if (volume != null && volume.profile.TryGet<DepthOfField>(out depthOfField))
-            {
-                startFocusDistance = depthOfField.focusDistance.value;
-            }
-            else
-            {
-                Debug.LogError("Depth of Field veya Volume bulunamadı!");
-            }
+            FindDepthOfField();
         }
-        public void Interacting(float focusDistanceWhenInspecting = .5f) // Depth of Field'ı etkinleştir veya devre dışı bırak
+
+        private void FindDepthOfField()
         {
-            if (depthOfField != null)
+            Volume[] volumes =
+                FindObjectsByType<Volume>(
+                    FindObjectsSortMode.None
+                );
+
+            foreach (Volume v in volumes)
             {
-                depthOfField.focusDistance.value = focusDistanceWhenInspecting;
+                if (v.profile != null &&
+                    v.profile.TryGet<DepthOfField>(
+                        out DepthOfField dof))
+                {
+                    volume = v;
+                    depthOfField = dof;
+
+                    startFocusDistance =
+                        depthOfField.focusDistance.value;
+
+                    Debug.Log(
+                        "Depth of Field da duoc tim thay!"
+                    );
+
+                    return;
+                }
             }
+
+            // Khong tim thay thi bo qua,
+            // khong gay loi cho he thong tuong tac.
+            Debug.LogWarning(
+                "Khong tim thay Depth of Field. " +
+                "Game van co the tiep tuc hoat dong."
+            );
         }
+
+        public void Interacting(
+            float focusDistanceWhenInspecting = 0.5f)
+        {
+            if (depthOfField == null)
+                return;
+
+            depthOfField.focusDistance.value =
+                focusDistanceWhenInspecting;
+        }
+
         public void NotInteracting()
         {
-            if (depthOfField != null)
-            {
-                depthOfField.focusDistance.value = startFocusDistance;
-            }
+            if (depthOfField == null)
+                return;
+
+            depthOfField.focusDistance.value =
+                startFocusDistance;
         }
-        public void ShowCursor() // Cursor'ı etkinleştir veya devre dışı bırak
+
+        public void ShowCursor()
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-        public void HideCursor() // Cursor'ı etkinleştir veya devre dışı bırak
+
+        public void HideCursor()
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+                Instance = null;
         }
     }
 }

@@ -1,3 +1,4 @@
+
 namespace FpsHorrorKit
 {
     using System.Collections;
@@ -10,9 +11,12 @@ namespace FpsHorrorKit
         public static LetterUIManager Instance { get; private set; }
 
         [Header("Letter UI")]
-        [SerializeField] GameObject _letterUI;
+        [SerializeField] private GameObject _letterUI;
         [SerializeField] private TextMeshProUGUI _text;
         [SerializeField] private Button _closeButton;
+
+        [Header("Custom Letter Image")]
+        [SerializeField] private Image _letterImage;
 
         [Header("Typing")]
         [SerializeField] private bool isTyping = false;
@@ -28,18 +32,36 @@ namespace FpsHorrorKit
                 Destroy(gameObject);
                 return;
             }
+
             Instance = this;
         }
+
         void Start()
         {
             _fpsController = FindAnyObjectByType<FpsController>();
 
-            _closeButton.onClick.AddListener(() => HideText());
+            _closeButton.onClick.AddListener(HideText);
+
+            if (_letterImage != null)
+            {
+                _letterImage.gameObject.SetActive(false);
+            }
         }
 
+        // Hien thi noi dung chu binh thuong
         public void ShowText(string text)
         {
             if (isOpen) return;
+
+            if (_letterImage != null)
+            {
+                _letterImage.gameObject.SetActive(false);
+            }
+
+            _text.gameObject.SetActive(true);
+            _text.text = "";
+
+            OpenLetter();
 
             if (isTyping)
             {
@@ -49,29 +71,86 @@ namespace FpsHorrorKit
             {
                 _text.text = text;
             }
+        }
+
+        // Hien thi anh giay PNG
+        public void ShowImage(Sprite image)
+        {
+            if (isOpen) return;
+
+            if (image == null)
+            {
+                Debug.LogWarning("Letter image is null!");
+                return;
+            }
+
+            if (_letterImage == null)
+            {
+                Debug.LogError(
+                    "Chua gan Letter Image trong Inspector!"
+                );
+                return;
+            }
+
+            // An chu cu
+            _text.text = "";
+            _text.gameObject.SetActive(false);
+
+            // Hien thi anh moi
+            _letterImage.sprite = image;
+            _letterImage.preserveAspect = true;
+            _letterImage.gameObject.SetActive(true);
+
+            OpenLetter();
+        }
+
+        // Mo giao dien doc giay
+        private void OpenLetter()
+        {
             _letterUI.SetActive(true);
             isOpen = true;
 
             InteractCameraSettings.Instance?.Interacting(.1f);
             InteractCameraSettings.Instance?.ShowCursor();
+
             PlayerInteract.Instance.sendRaycast = false;
-            _fpsController.isInteracting = true;
+
+            if (_fpsController != null)
+            {
+                _fpsController.isInteracting = true;
+            }
         }
 
+        // Dong giao dien doc giay
         public void HideText()
         {
             StopAllCoroutines();
 
             _letterUI.SetActive(false);
+
             _text.text = "";
+            _text.gameObject.SetActive(true);
+
+            if (_letterImage != null)
+            {
+                _letterImage.gameObject.SetActive(false);
+                _letterImage.sprite = null;
+            }
+
             isOpen = false;
 
             InteractCameraSettings.Instance?.NotInteracting();
             InteractCameraSettings.Instance?.HideCursor();
+
             PlayerInteract.Instance.sendRaycast = true;
-            _fpsController.isInteracting = false;
+
+            if (_fpsController != null)
+            {
+                _fpsController.isInteracting = false;
+            }
         }
 
+        // Hieu ung hien tung chu
         IEnumerator Typing(string newText, float delay)
         {
             foreach (char letter in newText.ToCharArray())
