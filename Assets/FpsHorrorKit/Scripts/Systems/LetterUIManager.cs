@@ -1,4 +1,3 @@
-
 namespace FpsHorrorKit
 {
     using System.Collections;
@@ -27,13 +26,12 @@ namespace FpsHorrorKit
 
         void Awake()
         {
-            if (Instance != null && Instance != this)
+            // Giữ Manager đầu tiên cho các object cũ dùng Instance.
+            // Không xóa Manager thứ hai.
+            if (Instance == null)
             {
-                Destroy(gameObject);
-                return;
+                Instance = this;
             }
-
-            Instance = this;
         }
 
         void Start()
@@ -48,7 +46,6 @@ namespace FpsHorrorKit
             }
         }
 
-        // Hien thi noi dung chu binh thuong
         public void ShowText(string text)
         {
             if (isOpen) return;
@@ -73,7 +70,6 @@ namespace FpsHorrorKit
             }
         }
 
-        // Hien thi anh giay PNG
         public void ShowImage(Sprite image)
         {
             if (isOpen) return;
@@ -86,17 +82,13 @@ namespace FpsHorrorKit
 
             if (_letterImage == null)
             {
-                Debug.LogError(
-                    "Chua gan Letter Image trong Inspector!"
-                );
+                Debug.LogError("Chua gan Letter Image trong Inspector!");
                 return;
             }
 
-            // An chu cu
             _text.text = "";
             _text.gameObject.SetActive(false);
 
-            // Hien thi anh moi
             _letterImage.sprite = image;
             _letterImage.preserveAspect = true;
             _letterImage.gameObject.SetActive(true);
@@ -104,7 +96,6 @@ namespace FpsHorrorKit
             OpenLetter();
         }
 
-        // Mo giao dien doc giay
         private void OpenLetter()
         {
             _letterUI.SetActive(true);
@@ -121,7 +112,6 @@ namespace FpsHorrorKit
             }
         }
 
-        // Dong giao dien doc giay
         public void HideText()
         {
             StopAllCoroutines();
@@ -150,7 +140,6 @@ namespace FpsHorrorKit
             }
         }
 
-        // Hieu ung hien tung chu
         IEnumerator Typing(string newText, float delay)
         {
             foreach (char letter in newText.ToCharArray())

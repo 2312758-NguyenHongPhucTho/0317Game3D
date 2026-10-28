@@ -400,3 +400,4 @@ MonoBehaviour:
     artists from all over the world. \nOur goal is to create a constantly growing,
     community-funded open content resource that provides complete freedom and usability
     for professionals and amateurs."
+  letterImage: {fileID: 0}

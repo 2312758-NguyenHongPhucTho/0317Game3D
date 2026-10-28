@@ -22,6 +22,10 @@ namespace FpsHorrorKit
         [Header("Collider Settings")]
         [SerializeField] private bool colliderDisabledDuringInteraction = false;
 
+        [Header("Lock Settings")]
+        [SerializeField] private bool isLocked;
+        [SerializeField] private string lockedText = "Find Key";
+
         [Header("Intercact Text")]
         [SerializeField] Sprite interactImageUi;
 
@@ -62,6 +66,9 @@ namespace FpsHorrorKit
 
         public void HoldInteract()
         {
+            if (isLocked)
+                return;
+
             if (colliderDisabledDuringInteraction && _collider != null)
             {
                 _collider.enabled = false;
@@ -94,7 +101,26 @@ namespace FpsHorrorKit
 
         public void Highlight()
         {
+            if (isLocked)
+            {
+                PlayerInteract.Instance.ChangeInteractText(lockedText);
+                return;
+            }
+
             PlayerInteract.Instance.ChangeInteractImage(interactImageUi);
+        }
+
+        public void UnlockAndOpen()
+        {
+            isLocked = false;
+            float openAngle = Mathf.Abs(maxAngle) >= Mathf.Abs(minAngle) ? maxAngle : minAngle;
+            currentAngle = openAngle;
+            transform.localEulerAngles = new Vector3(0f, initialAngle + openAngle, 0f);
+        }
+
+        public void Lock()
+        {
+            isLocked = true;
         }
 
         public void UnHighlight()

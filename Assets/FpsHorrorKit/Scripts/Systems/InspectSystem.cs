@@ -19,6 +19,8 @@ namespace FpsHorrorKit
         public Light lanternLight;
         public float lightInspectIntensity;
 
+        [SerializeField] public GameObject PlayerLight;
+
         private float _startLightIntensity;
 
         private FpsAssetsInputs _input;
@@ -73,15 +75,19 @@ namespace FpsHorrorKit
         {
             InteractCameraSettings.Instance?.Interacting(distanceToCamera);
 
+            PlayerLight.SetActive(true);
+
             float rotationX = _input.look.x * rotationSpeed * Time.deltaTime;
             float rotationY = _input.look.y * rotationSpeed * Time.deltaTime;
 
             transform.Rotate(Camera.main.transform.up, -rotationX, Space.World);
             transform.Rotate(Camera.main.transform.right, -rotationY, Space.World);
 
+
             if (_input.stopInteract)
             {
                 _input.stopInteract = false;
+                PlayerLight.SetActive(false);
                 StopInspection();
             }
         }

@@ -1,45 +1,57 @@
-
 namespace FpsHorrorKit
 {
     using UnityEngine;
 
     public class ITOInfoMessage : MonoBehaviour, IInteractable
     {
-        [Header("Interact Text")]
-        [SerializeField]
-        private string interactText = "Read Message [E]";
+        [SerializeField] private string interactText = "Read Message [E]";
 
-        [Header("Message")]
-        [TextArea(3, 10)]
         [SerializeField]
+        [TextArea(3, 10)]
         private string _message;
 
-        [Header("Custom Letter Image")]
-        [SerializeField]
-        private Sprite letterImage;
+        [Header("Letter Image")]
+        [SerializeField] private Sprite letterImage;
+
+        [Header("Target Letter UI")]
+        [SerializeField] private LetterUIManager letterUIManager;
 
         public void Interact()
         {
+            // Dùng Manager được gắn trực tiếp trên từng tờ giấy.
+            // Nếu chưa gắn thì dùng Manager mặc định để không lỗi giấy cũ.
+            LetterUIManager targetManager = letterUIManager != null
+                ? letterUIManager
+                : LetterUIManager.Instance;
+
+            if (targetManager == null)
+            {
+                Debug.LogWarning(
+                    "Chua gan Letter UI Manager cho: " + gameObject.name
+                );
+                return;
+            }
+
             if (letterImage != null)
             {
-                LetterUIManager.Instance.ShowImage(letterImage);
+                targetManager.ShowImage(letterImage);
             }
             else
             {
-                LetterUIManager.Instance.ShowText(_message);
+                targetManager.ShowText(_message);
             }
         }
 
         public void Highlight()
         {
-            PlayerInteract.Instance.ChangeInteractText(interactText);
-        }
-
-        public void HoldInteract()
-        {
+            PlayerInteract.Instance?.ChangeInteractText(interactText);
         }
 
         public void UnHighlight()
+        {
+        }
+
+        public void HoldInteract()
         {
         }
     }
