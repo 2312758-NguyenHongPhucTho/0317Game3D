@@ -23,6 +23,9 @@ namespace FpsHorrorKit
         private bool isFinished = false;
         private bool isOpen;
 
+        public bool IsOpen => isOpen;
+        public bool IsMoving => !isFinished;
+
         private void Start()
         {
             isFinished = true;

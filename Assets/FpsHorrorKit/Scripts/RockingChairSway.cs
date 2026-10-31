@@ -3,126 +3,172 @@ using System.Collections;
 
 public class RockingChairLiftAndDrop : MonoBehaviour
 {
-    [Header("1. Lắc nhẹ ban đầu")]
-    public float rockAngle = 5f;          // Góc lắc nhẹ
-    public float rockSpeed = 3f;          // Tốc độ lắc
-    public float rockingDuration = 4f;    // Thời gian lắc trước khi bị nhấc
+    [Header("Player")]
+    public Transform player;
 
-    [Header("2. Nhấc lên & Thả rơi (Giống có người cầm)")]
-    public float liftHeight = 0.18f;      // Độ cao nhấc lên rất thấp (vừa đủ nhấc chân ghế khỏi sàn)
-    public float liftUpTime = 0.4f;       // Thời gian từ từ nhấc lên (chậm hơn một chút)
-    public float dropDownTime = 0.12f;    // Thời gian thả rơi bịch xuống (rất nhanh và nặng)
+    [Header("Khoang cach kich hoat")]
+    public float activationDistance = 1f;
 
-    [Header("3. Độ lung lay / Chao đảo khi chạm đất")]
-    public float landTiltAngle = 10f;     // Góc nghiêng khi chạm đất
-    public float wobbleFrequency = 20f;   // Tốc độ chao đảo nẩy chân ghế
-    public float wobbleDecay = 5f;        // Tốc độ dập tắt chao đảo
-    public float wobbleDuration = 1.2f;   // Thời gian lung lay đến khi đứng yên
+    [Header("Manual trigger")]
+    [Tooltip("Bat de ghe chi chay khi script khac goi TriggerRocking().")]
+    public bool triggerOnly;
 
-    [Header("Bù chìm sàn")]
+    [Header("Thoi gian lac")]
+    public float rockingDuration = 30f;
+
+    [Header("Chuyen dong lac ghe")]
+    public float rockAngle = 6f;
+    public float rockSpeed = 3f;
+
+    [Header("Do muot khi lac")]
+    public float smoothSpeed = 3f;
+
+    [Header("Bu do cao tranh chim san")]
     public float heightCompensation = 0.12f;
-
-    [Header("Thời gian chờ")]
-    public float startDelay = 1f;
 
     private Vector3 startPosition;
     private Quaternion startRotation;
 
+    private bool hasTriggered = false;
+    private bool isRocking = false;
+
+    private float rockTimer = 0f;
+    private float currentRockAmount = 0f;
+
     void Start()
     {
+        // Luu vi tri va goc xoay ban dau
         startPosition = transform.localPosition;
         startRotation = transform.localRotation;
 
-        StartCoroutine(SequenceRoutine());
+        // Tu dong tim camera cua nguoi choi
+        if (player == null && Camera.main != null)
+        {
+            player = Camera.main.transform;
+        }
     }
 
-    IEnumerator SequenceRoutine()
+    void Update()
     {
-        yield return new WaitForSeconds(startDelay);
+        // Neu da kich hoat roi thi khong kiem tra lai
+        if (triggerOnly || hasTriggered || player == null)
+            return;
 
-        // ================================================
-        // GIAI ĐOẠN 1: LẮC NHẸ NHÀNG
-        // ================================================
-        float timer = 0f;
-        float phase = 0f;
+        // Tinh khoang cach giua player va ghe
+        float distance = Vector3.Distance(
+            transform.position,
+            player.position
+        );
 
-        while (timer < rockingDuration)
+        // Khi nguoi choi den gan 1 met
+        if (distance <= activationDistance)
         {
-            timer += Time.deltaTime;
-            phase += Time.deltaTime * rockSpeed;
+            hasTriggered = true;
 
-            float rotX = Mathf.Sin(phase) * rockAngle;
-            transform.localRotation = startRotation * Quaternion.Euler(rotX, 0f, 0f);
+            StartCoroutine(RockingSequence());
+        }
+    }
 
-            // Bù độ cao chống xuyên đất
-            float yOffset = Mathf.Abs(Mathf.Sin(rotX * Mathf.Deg2Rad)) * heightCompensation;
-            transform.localPosition = startPosition + Vector3.up * yOffset;
+    public void TriggerRocking()
+    {
+        if (isRocking || hasTriggered)
+            return;
+
+        hasTriggered = true;
+        StartCoroutine(RockingSequence());
+    }
+
+    IEnumerator RockingSequence()
+    {
+        isRocking = true;
+
+        float elapsed = 0f;
+
+        // Lac lien tuc trong 30 giay
+        while (elapsed < rockingDuration)
+        {
+            elapsed += Time.deltaTime;
+
+            // Tang do lac tu tu
+            currentRockAmount = Mathf.MoveTowards(
+                currentRockAmount,
+                1f,
+                smoothSpeed * Time.deltaTime
+            );
+
+            rockTimer += Time.deltaTime * rockSpeed;
+
+            float rotX =
+                Mathf.Sin(rockTimer) *
+                rockAngle *
+                currentRockAmount;
+
+            // Lac ghe qua lai
+            transform.localRotation =
+                startRotation *
+                Quaternion.Euler(rotX, 0f, 0f);
+
+            // Bu do cao de tranh chim san
+            float yOffset =
+                Mathf.Abs(
+                    Mathf.Sin(rotX * Mathf.Deg2Rad)
+                ) * heightCompensation;
+
+            transform.localPosition =
+                startPosition + Vector3.up * yOffset;
 
             yield return null;
         }
 
-        // ================================================
-        // GIAI ĐOẠN 2A: TỪ TỪ NHẤC LÊN (Giống có người cầm nhấc nhẹ)
-        // ================================================
-        float liftTimer = 0f;
-        while (liftTimer < liftUpTime)
+        // Het 30 giay thi dung lac tu tu
+        while (currentRockAmount > 0.001f)
         {
-            liftTimer += Time.deltaTime;
-            float t = liftTimer / liftUpTime;
+            currentRockAmount = Mathf.MoveTowards(
+                currentRockAmount,
+                0f,
+                smoothSpeed * Time.deltaTime
+            );
 
-            // Dùng SmoothStep để tay nhấc lên mượt mà, không bị giật cục
-            float smoothT = Mathf.SmoothStep(0f, 1f, t);
-            float currentHeight = smoothT * liftHeight;
+            rockTimer += Time.deltaTime * rockSpeed;
 
-            transform.localPosition = startPosition + Vector3.up * currentHeight;
+            float rotX =
+                Mathf.Sin(rockTimer) *
+                rockAngle *
+                currentRockAmount;
 
-            // Chúc đầu ghế nhẹ khi được nhấc lên
-            float liftTilt = smoothT * (landTiltAngle * 0.5f);
-            transform.localRotation = startRotation * Quaternion.Euler(liftTilt, 0f, 0f);
+            transform.localRotation =
+                startRotation *
+                Quaternion.Euler(rotX, 0f, 0f);
+
+            float yOffset =
+                Mathf.Abs(
+                    Mathf.Sin(rotX * Mathf.Deg2Rad)
+                ) * heightCompensation;
+
+            transform.localPosition =
+                startPosition + Vector3.up * yOffset;
 
             yield return null;
         }
 
-        // ================================================
-        // GIAI ĐOẠN 2B: THẢ RƠI TỰ DO (Rơi bịch xuống sàn ngay lập tức)
-        // ================================================
-        float dropTimer = 0f;
-        while (dropTimer < dropDownTime)
-        {
-            dropTimer += Time.deltaTime;
-            float t = dropTimer / dropDownTime;
-
-            // Bình phương thời gian tạo gia tốc trọng lực rơi rớt cực nhanh
-            float dropProgress = 1f - (t * t);
-            float currentHeight = dropProgress * liftHeight;
-
-            transform.localPosition = startPosition + Vector3.up * currentHeight;
-
-            yield return null;
-        }
-
-        // ================================================
-        // GIAI ĐOẠN 3: CHẠM ĐẤT VÀ LUNG LAY TẮT DẦN (WOBBLE)
-        // ================================================
-        float wobbleTimer = 0f;
-
-        while (wobbleTimer < wobbleDuration)
-        {
-            wobbleTimer += Time.deltaTime;
-
-            float damping = Mathf.Exp(-wobbleDecay * wobbleTimer);
-            float currentWobble = Mathf.Sin(wobbleTimer * wobbleFrequency) * landTiltAngle * damping;
-
-            transform.localRotation = startRotation * Quaternion.Euler(currentWobble, 0f, 0f);
-
-            float yOffset = Mathf.Abs(Mathf.Sin(currentWobble * Mathf.Deg2Rad)) * heightCompensation;
-            transform.localPosition = startPosition + Vector3.up * yOffset;
-
-            yield return null;
-        }
-
-        // Hoàn tất trả về gốc
+        // Tra ghe ve trang thai ban dau
         transform.localPosition = startPosition;
         transform.localRotation = startRotation;
+
+        currentRockAmount = 0f;
+        isRocking = false;
+
+        // hasTriggered van = true
+        // Nen khong kich hoat lai
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = Color.yellow;
+
+        Gizmos.DrawWireSphere(
+            transform.position,
+            activationDistance
+        );
     }
 }
