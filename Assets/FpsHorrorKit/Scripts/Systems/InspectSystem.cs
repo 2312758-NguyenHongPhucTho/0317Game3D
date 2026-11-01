@@ -1,20 +1,26 @@
+
 namespace FpsHorrorKit
 {
     using System.Collections;
     using TMPro;
     using UnityEngine;
     using UnityEngine.UI;
+    using UnityEngine.InputSystem;
 
     public class InspectSystem : MonoBehaviour, IInteractable
     {
         [Header("For Rotation")]
-        [Tooltip("Object rotation speed")] public float rotationSpeed;
-        [Tooltip("Speed for returning to the starting position")] public float returnSpeed = 5f;
+        [Tooltip("Object rotation speed")]
+        public float rotationSpeed;
+
+        [Tooltip("Speed for returning to the starting position")]
+        public float returnSpeed = 5f;
 
         [Header("For Camera")]
-        [Tooltip("Distance to the camera during inspection")] public float distanceToCamera;
+        [Tooltip("Distance to the camera during inspection")]
+        public float distanceToCamera;
 
-        [Header("Higlight UI")]
+        [Header("Highlight UI")]
         public string interactText = "Press [E] to Inspect";
 
         [Header("Inspect Caption")]
@@ -25,21 +31,31 @@ namespace FpsHorrorKit
         public Light lanternLight;
         public float lightInspectIntensity;
 
-        [SerializeField] public GameObject PlayerLight;
+        [SerializeField]
+        public GameObject PlayerLight;
+
+        [Header("Destroy Item")]
+        [Tooltip("Allow pressing X to destroy the item while inspecting")]
+        public bool canDestroyWithX = true;
 
         private float _startLightIntensity;
 
         private FpsAssetsInputs _input;
         private FpsController _fpsController;
+
         private Vector3 _startPosition;
         private Quaternion _startRotation;
 
         private bool _isInteracting;
+        private bool _isBeingDestroyed;
+
         private Collider _collider;
+
         private bool _playerLightWasActive;
         private bool _playerLightStateSaved;
 
         private static GameObject _cachedPlayerLight;
+
         private static GameObject _captionRoot;
         private static TextMeshProUGUI _captionText;
         private static InspectSystem _captionOwner;
@@ -47,8 +63,10 @@ namespace FpsHorrorKit
         private void Awake()
         {
             _collider = GetComponent<Collider>();
+
             _input = FindAnyObjectByType<FpsAssetsInputs>();
             _fpsController = FindAnyObjectByType<FpsController>();
+
             ResolvePlayerLight();
         }
 
@@ -58,12 +76,14 @@ namespace FpsHorrorKit
             _startRotation = transform.rotation;
 
             if (lanternLight != null)
+            {
                 _startLightIntensity = lanternLight.intensity;
+            }
         }
 
         private void LateUpdate()
         {
-            if (_isInteracting)
+            if (_isInteracting && !_isBeingDestroyed)
             {
                 HandleInspection();
             }
@@ -71,38 +91,84 @@ namespace FpsHorrorKit
 
         public void Interact()
         {
-            if (_fpsController == null || Camera.main == null) return;
+            if (_isBeingDestroyed)
+                return;
 
-            PlayerInteract.Instance.sendRaycast = false;
+            if (_fpsController == null || Camera.main == null)
+                return;
+
+            if (_isInteracting)
+                return;
+
+            if (PlayerInteract.Instance != null)
+            {
+                PlayerInteract.Instance.sendRaycast = false;
+            }
 
             _fpsController.isInteracting = true;
-            Vector3 targetPosition = Camera.main.transform.position + Camera.main.transform.forward * distanceToCamera;
+
+            Vector3 targetPosition =
+                Camera.main.transform.position +
+                Camera.main.transform.forward * distanceToCamera;
 
             StopAllCoroutines();
-            StartCoroutine(SmoothTransition(targetPosition, _startRotation, disableCollider: false));
+
+            StartCoroutine(
+                SmoothTransition(
+                    targetPosition,
+                    _startRotation,
+                    disableCollider: false
+                )
+            );
 
             ToggleCollider(false);
             ToggleLantern(false);
+
             ShowInspectCaption();
         }
 
         private void HandleInspection()
         {
+            // Press X to destroy inspected item
+            if (canDestroyWithX &&
+                Keyboard.current != null &&
+                Keyboard.current.xKey.wasPressedThisFrame)
+            {
+                DestroyInspectedItem();
+                return;
+            }
+
             InteractCameraSettings.Instance?.Interacting(distanceToCamera);
 
             SetPlayerLightActive(true);
 
-            float rotationX = _input.look.x * rotationSpeed * Time.deltaTime;
-            float rotationY = _input.look.y * rotationSpeed * Time.deltaTime;
+            if (_input != null && Camera.main != null)
+            {
+                float rotationX =
+                    _input.look.x * rotationSpeed * Time.deltaTime;
 
-            transform.Rotate(Camera.main.transform.up, -rotationX, Space.World);
-            transform.Rotate(Camera.main.transform.right, -rotationY, Space.World);
+                float rotationY =
+                    _input.look.y * rotationSpeed * Time.deltaTime;
 
+                transform.Rotate(
+                    Camera.main.transform.up,
+                    -rotationX,
+                    Space.World
+                );
 
-            if (_input.stopInteract)
+                transform.Rotate(
+                    Camera.main.transform.right,
+                    -rotationY,
+                    Space.World
+                );
+            }
+
+            if (_input != null && _input.stopInteract)
             {
                 _input.stopInteract = false;
+
                 SetPlayerLightActive(false);
+
                 StopInspection();
             }
         }
@@ -112,17 +178,89 @@ namespace FpsHorrorKit
             HideInspectCaption();
 
             StopAllCoroutines();
-            StartCoroutine(SmoothTransition(_startPosition, _startRotation, disableCollider: true));
 
             _isInteracting = false;
-            _fpsController.isInteracting = false;
+
+            StartCoroutine(
+                SmoothTransition(
+                    _startPosition,
+                    _startRotation,
+                    disableCollider: true
+                )
+            );
+
+            if (_fpsController != null)
+            {
+                _fpsController.isInteracting = false;
+            }
 
             InteractCameraSettings.Instance?.NotInteracting();
 
             ToggleLantern(true);
 
-            PlayerInteract.Instance.sendRaycast = true;
+            if (PlayerInteract.Instance != null)
+            {
+                PlayerInteract.Instance.sendRaycast = true;
+            }
         }
+
+        // =====================================
+        // DESTROY ITEM WHEN PRESSING X
+        // =====================================
+
+        private void DestroyInspectedItem()
+        {
+            if (_isBeingDestroyed)
+                return;
+
+            _isBeingDestroyed = true;
+            _isInteracting = false;
+
+            // Stop all animations
+            StopAllCoroutines();
+
+            // Hide inspect caption
+            HideInspectCaption();
+
+            // Restore player light
+            SetPlayerLightActive(false);
+
+            // Restore lantern intensity
+            ToggleLantern(true);
+
+            // Restore player movement
+            if (_fpsController != null)
+            {
+                _fpsController.isInteracting = false;
+            }
+
+            // Restore camera
+            InteractCameraSettings.Instance?.NotInteracting();
+
+            // Restore interaction raycast
+            if (PlayerInteract.Instance != null)
+            {
+                PlayerInteract.Instance.sendRaycast = true;
+            }
+
+            // Clear input
+            if (_input != null)
+            {
+                _input.stopInteract = false;
+            }
+
+            // Disable collider before destroying
+            ToggleCollider(false);
+
+            Debug.Log("Destroyed inspected item: " + gameObject.name);
+
+            // Destroy the item
+            Destroy(gameObject);
+        }
+
+        // =====================================
+        // PLAYER LIGHT
+        // =====================================
 
         private void ResolvePlayerLight()
         {
@@ -135,10 +273,11 @@ namespace FpsHorrorKit
                 return;
             }
 
-            Transform[] transforms = FindObjectsByType<Transform>(
-                FindObjectsInactive.Include,
-                FindObjectsSortMode.None
-            );
+            Transform[] transforms =
+                FindObjectsByType<Transform>(
+                    FindObjectsInactive.Include,
+                    FindObjectsSortMode.None
+                );
 
             foreach (Transform sceneTransform in transforms)
             {
@@ -147,6 +286,7 @@ namespace FpsHorrorKit
 
                 _cachedPlayerLight = sceneTransform.gameObject;
                 PlayerLight = _cachedPlayerLight;
+
                 return;
             }
         }
@@ -175,12 +315,40 @@ namespace FpsHorrorKit
             }
         }
 
-        private IEnumerator SmoothTransition(Vector3 targetPosition, Quaternion targetRotation, bool disableCollider)
+        // =====================================
+        // SMOOTH TRANSITION
+        // =====================================
+
+        private IEnumerator SmoothTransition(
+            Vector3 targetPosition,
+            Quaternion targetRotation,
+            bool disableCollider
+        )
         {
-            while (Vector3.Distance(transform.position, targetPosition) > 0.01f || Quaternion.Angle(transform.rotation, targetRotation) > 0.1f)
+            while (
+                Vector3.Distance(
+                    transform.position,
+                    targetPosition
+                ) > 0.01f ||
+
+                Quaternion.Angle(
+                    transform.rotation,
+                    targetRotation
+                ) > 0.1f
+            )
             {
-                transform.position = Vector3.Lerp(transform.position, targetPosition, returnSpeed * Time.deltaTime);
-                transform.rotation = Quaternion.Lerp(transform.rotation, targetRotation, returnSpeed * Time.deltaTime);
+                transform.position = Vector3.Lerp(
+                    transform.position,
+                    targetPosition,
+                    returnSpeed * Time.deltaTime
+                );
+
+                transform.rotation = Quaternion.Lerp(
+                    transform.rotation,
+                    targetRotation,
+                    returnSpeed * Time.deltaTime
+                );
+
                 yield return null;
             }
 
@@ -188,6 +356,7 @@ namespace FpsHorrorKit
             transform.rotation = targetRotation;
 
             _isInteracting = !disableCollider;
+
             ToggleCollider(disableCollider);
         }
 
@@ -207,14 +376,27 @@ namespace FpsHorrorKit
         {
             if (lanternLight != null)
             {
-                lanternLight.intensity = isActive ? _startLightIntensity : lightInspectIntensity;
+                lanternLight.intensity = isActive
+                    ? _startLightIntensity
+                    : lightInspectIntensity;
             }
         }
 
+        // =====================================
+        // INTERACTION UI
+        // =====================================
+
         public void Highlight()
         {
-            PlayerInteract.Instance.ChangeInteractText(interactText);
+            if (PlayerInteract.Instance != null)
+            {
+                PlayerInteract.Instance.ChangeInteractText(interactText);
+            }
         }
+
+        // =====================================
+        // INSPECT CAPTION
+        // =====================================
 
         private void ShowInspectCaption()
         {
@@ -222,6 +404,7 @@ namespace FpsHorrorKit
                 return;
 
             EnsureCaptionUI();
+
             _captionOwner = this;
             _captionText.text = inspectCaption;
             _captionRoot.SetActive(true);
@@ -233,7 +416,9 @@ namespace FpsHorrorKit
                 return;
 
             if (_captionRoot != null)
+            {
                 _captionRoot.SetActive(false);
+            }
 
             _captionOwner = null;
         }
@@ -251,12 +436,19 @@ namespace FpsHorrorKit
             );
 
             Canvas canvas = _captionRoot.GetComponent<Canvas>();
+
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = 1500;
 
-            CanvasScaler scaler = _captionRoot.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
+            CanvasScaler scaler =
+                _captionRoot.GetComponent<CanvasScaler>();
+
+            scaler.uiScaleMode =
+                CanvasScaler.ScaleMode.ScaleWithScreenSize;
+
+            scaler.referenceResolution =
+                new Vector2(1920f, 1080f);
+
             scaler.matchWidthOrHeight = 0.5f;
 
             GameObject textObject = new GameObject(
@@ -264,22 +456,41 @@ namespace FpsHorrorKit
                 typeof(RectTransform),
                 typeof(TextMeshProUGUI)
             );
-            textObject.transform.SetParent(_captionRoot.transform, false);
 
-            RectTransform rect = textObject.GetComponent<RectTransform>();
+            textObject.transform.SetParent(
+                _captionRoot.transform,
+                false
+            );
+
+            RectTransform rect =
+                textObject.GetComponent<RectTransform>();
+
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.pivot = new Vector2(0.5f, 0.5f);
+
             rect.anchoredPosition = new Vector2(0f, -235f);
             rect.sizeDelta = new Vector2(900f, 90f);
 
-            _captionText = textObject.GetComponent<TextMeshProUGUI>();
-            _captionText.alignment = TextAlignmentOptions.Center;
+            _captionText =
+                textObject.GetComponent<TextMeshProUGUI>();
+
+            _captionText.alignment =
+                TextAlignmentOptions.Center;
+
             _captionText.fontSize = 34f;
-            _captionText.fontStyle = FontStyles.Italic;
-            _captionText.color = new Color(0.94f, 0.87f, 0.70f, 1f);
-            _captionText.outlineColor = new Color(0.08f, 0.04f, 0.02f, 0.95f);
+
+            _captionText.fontStyle =
+                FontStyles.Italic;
+
+            _captionText.color =
+                new Color(0.94f, 0.87f, 0.70f, 1f);
+
+            _captionText.outlineColor =
+                new Color(0.08f, 0.04f, 0.02f, 0.95f);
+
             _captionText.outlineWidth = 0.24f;
+
             _captionText.raycastTarget = false;
 
             _captionRoot.SetActive(false);
@@ -291,7 +502,13 @@ namespace FpsHorrorKit
             HideInspectCaption();
         }
 
+        private void OnDestroy()
+        {
+            HideInspectCaption();
+        }
+
         public void HoldInteract() { }
+
         public void UnHighlight() { }
     }
 }
