@@ -6,7 +6,7 @@ namespace FpsHorrorKit
     {
         [SerializeField] private DoorSystem targetDoor;
         [SerializeField] private DragToOpenSystem targetDragDoor;
-        [SerializeField] private string interactText = "Pick up door key [E]";
+        [SerializeField] private string interactText = "Nhấn [E] để nhặt chìa khóa";
 
         public void Configure(DoorSystem door)
         {

@@ -5,11 +5,11 @@ namespace FpsHorrorKit
     public class ITOCamera : MonoBehaviour, IInteractable
     {
         public Item photoCamera;
-        [SerializeField] private string interactText = "Take camera [E]";
+        [SerializeField] private string interactText = "Nhấn [E] để nhặt máy ảnh";
 
         public void Interact()
         {
-            InteractMessageScript.Instance?.ShowMessage("Camera taken! To use, press 2 then T.");
+            InteractMessageScript.Instance?.ShowMessage("Đã nhặt máy ảnh. Nhấn [2] rồi [T] để sử dụng.");
             photoCamera.hasItem = true;
             Destroy(gameObject);
         }

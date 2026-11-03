@@ -7,9 +7,9 @@ namespace FpsHorrorKit
     public class DoorSystem : MonoBehaviour, IInteractable
     {
         [Header("Highlight UI")]
-        [SerializeField] private string interactText = "Door Open/Close [E]";
-        [SerializeField] private string doorLockedText = "Find Key";
-        [SerializeField] private string useKeyText = "Use Key";
+        [SerializeField] private string interactText = "Nhấn [E] để mở hoặc đóng cửa";
+        [SerializeField] private string doorLockedText = "Cửa vẫn khóa. Cần tìm chìa khóa.";
+        [SerializeField] private string useKeyText = "Nhấn [E] để dùng chìa khóa";
 
         [Header("Door Settings")]
         [Tooltip("Kapı kilitli mi?")] public bool isLocked;
@@ -17,6 +17,10 @@ namespace FpsHorrorKit
         [Tooltip("Kapının menteşe etrafında dönme hızı")] public float rotationSpeed = 100f;
         public float endRotation;
         public AudioSource doorAudioSource;
+
+        [Header("0317 ritual door gate (optional)")]
+        [SerializeField] private RitualDoorSeal0317 ritualDoorSeal;
+        [SerializeField] private RitualRoomDoorLock ritualRoomDoorLock;
 
 
         private float startRotation = 0;
@@ -34,11 +38,29 @@ namespace FpsHorrorKit
 
         public void Interact()
         {
-            if (hasKey)
+            if (ritualRoomDoorLock != null && ritualRoomDoorLock.IsLocked) return;
+            if (ritualDoorSeal != null && !ritualDoorSeal.IsSealRemoved)
             {
-                isLocked = false;
+                ritualDoorSeal.NotifyDoorBlocked();
+                return;
             }
-            if (isLocked) { return; }
+            if (isLocked)
+            {
+                if (!isFinished) return;
+                if (hasKey)
+                {
+                    isLocked = false;
+                }
+                else if (DoorKeyUseController.Instance != null && DoorKeyUseController.Instance.HasKeyFor(this))
+                {
+                    isLocked = false;
+                    DoorKeyUseController.Instance.ConsumeKeyFor(this);
+                }
+                else
+                {
+                    return;
+                }
+            }
 
             if (!isOpen && isFinished)
             {
@@ -55,7 +77,13 @@ namespace FpsHorrorKit
 
         public void Highlight()
         {
-            if (hasKey && isLocked)
+            if (ritualRoomDoorLock != null && ritualRoomDoorLock.IsLocked) return;
+            if (ritualDoorSeal != null && !ritualDoorSeal.IsSealRemoved)
+            {
+                PlayerInteract.Instance.ChangeInteractText("BÙA PHONG ẤN CHƯA ĐƯỢC GỠ!");
+                return;
+            }
+            if ((hasKey || (DoorKeyUseController.Instance != null && DoorKeyUseController.Instance.HasKeyFor(this))) && isLocked)
             {
                 PlayerInteract.Instance.ChangeInteractText(useKeyText);
             }

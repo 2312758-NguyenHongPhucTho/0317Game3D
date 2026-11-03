@@ -18,7 +18,7 @@ namespace FpsHorrorKit
         [SerializeField][Tooltip("Kapının menteşe etrafında dönme hızı")] private float rotationSpeed = 100f;
 
         [Header("UI")]
-        [SerializeField] private string interactText = "Hide/Come out [E]";
+        [SerializeField] private string interactText = "Nhấn [E] để ẩn nấp hoặc bước ra";
 
         private bool isInteract;
         private FpsController _fpsController;

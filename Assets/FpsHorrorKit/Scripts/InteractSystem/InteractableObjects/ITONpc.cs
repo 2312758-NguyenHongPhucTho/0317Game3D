@@ -5,7 +5,7 @@ namespace FpsHorrorKit
     public class ITONpc : MonoBehaviour, IInteractable
     {
         [Tooltip("Dialogue datas for the NPC")] public DialogueData[] dialogueData;
-        [SerializeField] private string interactText = "Talk Npc [E]";
+        [SerializeField] private string interactText = "Nhấn [E] để trò chuyện";
         private int currentDialogueIndex = 0;
 
         private void Start()

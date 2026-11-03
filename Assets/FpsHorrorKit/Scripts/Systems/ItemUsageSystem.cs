@@ -179,7 +179,7 @@ namespace FpsHorrorKit
 
                 if (isFirstCameraOpen == false)
                 {
-                    InteractMessageScript.Instance?.ShowMessage("Press tab to open album!");
+                    InteractMessageScript.Instance?.ShowMessage("Nhấn [Tab] để mở album ảnh.");
                     isFirstCameraOpen = true;
                 }
             }

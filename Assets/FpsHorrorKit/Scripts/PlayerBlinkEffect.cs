@@ -23,6 +23,12 @@ namespace FpsHorrorKit
 
         public bool IsBlinking => _isBlinking;
 
+        public void RequestBlink()
+        {
+            if (!_isBlinking)
+                StartCoroutine(Blink());
+        }
+
         private void Awake()
         {
             CreateBlinkUI();

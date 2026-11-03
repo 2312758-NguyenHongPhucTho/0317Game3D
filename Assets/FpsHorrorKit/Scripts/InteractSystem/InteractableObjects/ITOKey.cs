@@ -5,11 +5,12 @@ namespace FpsHorrorKit
     public class ITOKey : MonoBehaviour, IInteractable
     {
         public DoorSystem compatibleDoor;
-        [SerializeField] private string interactText = "Take key [E]";
+        [SerializeField] private string interactText = "Nhấn [E] để nhặt chìa khóa";
 
         public void Interact()
         {
             compatibleDoor.hasKey = true;
+            InteractMessageScript.Instance?.ShowMessage("Đã nhặt chìa khóa.");
             Destroy(gameObject);
         }
         public void Highlight()

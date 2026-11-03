@@ -24,7 +24,7 @@ namespace FpsHorrorKit
 
         [Header("Lock Settings")]
         [SerializeField] private bool isLocked;
-        [SerializeField] private string lockedText = "Find Key";
+        [SerializeField] private string lockedText = "Cửa vẫn khóa. Cần tìm chìa khóa.";
 
         [Header("Intercact Text")]
         [SerializeField] Sprite interactImageUi;

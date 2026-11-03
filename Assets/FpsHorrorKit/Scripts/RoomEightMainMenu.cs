@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -14,6 +15,14 @@ public sealed class RoomEightMainMenu : MonoBehaviour
     [SerializeField] private GameObject gameplayPlayer;
     [SerializeField] private Camera menuCamera;
     [SerializeField] private TMP_FontAsset titleFont;
+
+    [Header("Menu Background Music")]
+    [Tooltip("AudioSource with the menu music clip; optional if attached to this object")]
+    [SerializeField] private AudioSource menuMusic;
+    [Tooltip("Seconds to fade out when New Game is selected")]
+    [Min(0f)][SerializeField] private float menuMusicFadeDuration = 1.5f;
+    private float menuMusicNormalVolume = 0.25f;
+    private Coroutine menuMusicFadeRoutine;
 
     [Header("Presentation")]
     private GameObject menuCanvas;
@@ -48,6 +57,7 @@ public sealed class RoomEightMainMenu : MonoBehaviour
     {
         CacheGameplayControls();
         LoadSavedSettings();
+        InitializeMenuMusic();
         BuildMenu();
         OpenMenu();
     }
@@ -84,6 +94,7 @@ public sealed class RoomEightMainMenu : MonoBehaviour
             return;
 
         isInMenu = false;
+        FadeOutMenuMusic();
         if (menuCanvas != null)
             menuCanvas.SetActive(false);
         if (menuCamera != null)
@@ -122,8 +133,94 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         if (menuCanvas != null)
             menuCanvas.SetActive(true);
 
+        PlayMenuMusic();
+
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
+    }
+
+    // AudioSource can be placed on Room8_MenuPlayer itself.
+    // Assign an audio clip in the Inspector and set its Volume there.
+    private void InitializeMenuMusic()
+    {
+        if (menuMusic == null)
+            menuMusic = GetComponent<AudioSource>();
+
+        if (menuMusic == null)
+        {
+            Debug.LogWarning("[RoomEightMainMenu] No menu AudioSource assigned. Add one to Room8_MenuPlayer.");
+            return;
+        }
+
+        menuMusicNormalVolume = menuMusic.volume;
+        menuMusic.playOnAwake = false;
+        menuMusic.loop = true;
+        menuMusic.spatialBlend = 0f; // 2D music, unaffected by distance.
+    }
+
+    private void PlayMenuMusic()
+    {
+        if (menuMusic == null)
+            return;
+
+        if (menuMusicFadeRoutine != null)
+        {
+            StopCoroutine(menuMusicFadeRoutine);
+            menuMusicFadeRoutine = null;
+        }
+
+        if (menuMusic.clip == null)
+        {
+            Debug.LogWarning("[RoomEightMainMenu] Assign an Audio Clip to Menu Music / AudioSource in Inspector.");
+            return;
+        }
+
+        menuMusic.volume = menuMusicNormalVolume;
+        if (!menuMusic.isPlaying)
+            menuMusic.Play();
+    }
+
+    private void FadeOutMenuMusic()
+    {
+        if (menuMusic == null || !menuMusic.isPlaying)
+            return;
+
+        if (menuMusicFadeRoutine != null)
+            StopCoroutine(menuMusicFadeRoutine);
+
+        if (menuMusicFadeDuration <= 0f)
+        {
+            menuMusic.Stop();
+            menuMusic.volume = menuMusicNormalVolume;
+            menuMusicFadeRoutine = null;
+            return;
+        }
+
+        menuMusicFadeRoutine = StartCoroutine(FadeOutMenuMusicRoutine());
+    }
+
+    private IEnumerator FadeOutMenuMusicRoutine()
+    {
+        float startVolume = menuMusic.volume;
+        float elapsed = 0f;
+
+        while (elapsed < menuMusicFadeDuration && menuMusic != null)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            menuMusic.volume = Mathf.Lerp(
+                startVolume, 0f,
+                Mathf.Clamp01(elapsed / menuMusicFadeDuration)
+            );
+            yield return null;
+        }
+
+        if (menuMusic != null)
+        {
+            menuMusic.Stop();
+            menuMusic.volume = menuMusicNormalVolume;
+        }
+
+        menuMusicFadeRoutine = null;
     }
 
     private void UpdateMenuMouseInput()
