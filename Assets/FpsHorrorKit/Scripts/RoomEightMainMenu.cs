@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -11,6 +12,8 @@ using UnityEngine.UI;
 /// </summary>
 public sealed class RoomEightMainMenu : MonoBehaviour
 {
+    private enum MenuMode { MainMenu, PauseMenu }
+    public static bool IsPauseActive { get; private set; }
     [Header("Scene references")]
     [SerializeField] private GameObject gameplayPlayer;
     [SerializeField] private Camera menuCamera;
@@ -43,6 +46,18 @@ public sealed class RoomEightMainMenu : MonoBehaviour
     private Slider mouseSensitivitySlider;
     private TextMeshProUGUI masterVolumeValue;
     private TextMeshProUGUI mouseSensitivityValue;
+    private MenuMode menuMode;
+    private bool hasGameplaySession;
+    private float previousTimeScale = 1f;
+    private bool[] pauseBehaviourStates;
+    private bool pauseCharacterControllerState;
+    private Button continueButton;
+    private Button newGameButton;
+    private Button returnToMainMenuButton;
+    private GameObject creditsOverlay;
+    private GameObject quitOverlay;
+    private GameObject restartOverlay;
+    private bool previousAudioListenerPause;
 
     private const string MasterVolumePreference = "Room8.MasterVolume";
     private const string MouseSensitivityPreference = "Room8.MouseSensitivity";
@@ -59,7 +74,7 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         LoadSavedSettings();
         InitializeMenuMusic();
         BuildMenu();
-        OpenMenu();
+        OpenMainMenu();
     }
 
     private void Update()
@@ -79,10 +94,24 @@ public sealed class RoomEightMainMenu : MonoBehaviour
                 Destroy(menuCanvas);
             menuCanvas = null;
             BuildMenu();
-            OpenMenu();
+            OpenMainMenu();
         }
 
         lastUnscaledTime = Time.unscaledTime;
+
+        if (!isInMenu)
+        {
+            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame && CanPauseGameplay())
+                OpenPauseMenu();
+            return;
+        }
+
+        if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame && !settingsOpen &&
+            !IsOverlayOpen(creditsOverlay) && !IsOverlayOpen(quitOverlay) && menuMode == MenuMode.PauseMenu)
+        {
+            ResumeGame();
+            return;
+        }
 
         if (isInMenu)
             UpdateMenuMouseInput();
@@ -93,7 +122,17 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         if (!isInMenu)
             return;
 
+        if (hasGameplaySession)
+        {
+            RequestRestart();
+            return;
+        }
+
+        hasGameplaySession = true;
         isInMenu = false;
+        IsPauseActive = false;
+        AudioListener.pause = false;
+        Time.timeScale = previousTimeScale;
         FadeOutMenuMusic();
         if (menuCanvas != null)
             menuCanvas.SetActive(false);
@@ -124,9 +163,38 @@ public sealed class RoomEightMainMenu : MonoBehaviour
             settingsOverlay.SetActive(false);
     }
 
-    private void OpenMenu()
+    public void ContinueFromMenu()
     {
+        if (hasGameplaySession) ResumeGame();
+    }
+
+    public void ReturnToMainMenu()
+    {
+        if (!isInMenu || menuMode != MenuMode.PauseMenu || !hasGameplaySession)
+            return;
+
+        CloseSettings();
+        CloseCredits();
+        CloseQuitConfirmation();
+        CloseRestartConfirmation();
+        menuMode = MenuMode.MainMenu;
+        IsPauseActive = true;
+        Time.timeScale = 0f;
+        AudioListener.pause = true;
+        if (menuCamera != null)
+            menuCamera.enabled = true;
+        PlayMenuMusic();
+        UpdateButtonStates();
+    }
+
+    private void OpenMainMenu()
+    {
+        menuMode = MenuMode.MainMenu;
         isInMenu = true;
+        IsPauseActive = false;
+        AudioListener.pause = false;
+        previousTimeScale = Time.timeScale;
+        Time.timeScale = 0f;
         SetGameplayControls(false);
         if (menuCamera != null)
             menuCamera.enabled = true;
@@ -134,9 +202,87 @@ public sealed class RoomEightMainMenu : MonoBehaviour
             menuCanvas.SetActive(true);
 
         PlayMenuMusic();
+        UpdateButtonStates();
 
         Cursor.visible = true;
         Cursor.lockState = CursorLockMode.None;
+    }
+
+    private void OpenPauseMenu()
+    {
+        if (!CanPauseGameplay()) return;
+        menuMode = MenuMode.PauseMenu;
+        isInMenu = true;
+        previousTimeScale = Time.timeScale;
+        previousAudioListenerPause = AudioListener.pause;
+        IsPauseActive = true;
+        AudioListener.pause = true;
+        CapturePauseControls();
+        DisablePausedControls();
+        Time.timeScale = 0f;
+        if (menuCanvas != null) menuCanvas.SetActive(true);
+        // Keep the gameplay camera active; the menu camera is for MainMenu only.
+        UpdateButtonStates();
+        Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+    }
+
+    private void ResumeGame()
+    {
+        if (!isInMenu || !hasGameplaySession) return;
+        CloseSettings();
+        CloseCredits();
+        CloseQuitConfirmation();
+        CloseRestartConfirmation();
+        isInMenu = false;
+        if (menuCanvas != null) menuCanvas.SetActive(false);
+        if (menuCamera != null) menuCamera.enabled = false;
+        RestorePausedControls();
+        Time.timeScale = previousTimeScale;
+        IsPauseActive = false;
+        AudioListener.pause = previousAudioListenerPause;
+        Cursor.visible = false;
+        Cursor.lockState = CursorLockMode.Locked;
+    }
+
+    private bool CanPauseGameplay()
+    {
+        return hasGameplaySession;
+    }
+
+    private void CapturePauseControls()
+    {
+        if (playerBehaviours != null)
+        {
+            pauseBehaviourStates = new bool[playerBehaviours.Length];
+            for (int i = 0; i < playerBehaviours.Length; i++)
+                pauseBehaviourStates[i] = playerBehaviours[i] != null && playerBehaviours[i].enabled;
+        }
+        pauseCharacterControllerState = playerCharacterController != null && playerCharacterController.enabled;
+    }
+
+    private void DisablePausedControls()
+    {
+        if (playerBehaviours != null)
+            for (int i = 0; i < playerBehaviours.Length; i++)
+                if (playerBehaviours[i] != null) playerBehaviours[i].enabled = false;
+        if (playerCharacterController != null) playerCharacterController.enabled = false;
+    }
+
+    private void RestorePausedControls()
+    {
+        if (playerBehaviours != null && pauseBehaviourStates != null)
+            for (int i = 0; i < playerBehaviours.Length; i++)
+                if (playerBehaviours[i] != null) playerBehaviours[i].enabled = pauseBehaviourStates[i];
+        if (playerCharacterController != null) playerCharacterController.enabled = pauseCharacterControllerState;
+    }
+
+    private void UpdateButtonStates()
+    {
+        if (continueButton != null) continueButton.interactable = hasGameplaySession;
+        if (newGameButton != null) newGameButton.interactable = true;
+        if (returnToMainMenuButton != null)
+            returnToMainMenuButton.gameObject.SetActive(menuMode == MenuMode.PauseMenu && hasGameplaySession);
     }
 
     // AudioSource can be placed on Room8_MenuPlayer itself.
@@ -156,6 +302,7 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         menuMusic.playOnAwake = false;
         menuMusic.loop = true;
         menuMusic.spatialBlend = 0f; // 2D music, unaffected by distance.
+        menuMusic.ignoreListenerPause = true;
     }
 
     private void PlayMenuMusic()
@@ -363,15 +510,16 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         title.rectTransform.pivot = new Vector2(0f, 1f);
         title.rectTransform.sizeDelta = new Vector2(500f, 120f);
         title.rectTransform.anchoredPosition = new Vector2(84f, -120f);
-        title.enableWordWrapping = false;
+        title.textWrappingMode = TextWrappingModes.NoWrap;
         title.characterSpacing = 7f;
 
-        CreateButton(canvasRect, "Continue_Button", "TIẾP TỤC", 300f, null);
-        Button newGameButton = CreateButton(canvasRect, "NewGame_Button", "TRÒ CHƠI MỚI", 384f, StartNewGame);
+        continueButton = CreateButton(canvasRect, "Continue_Button", "TIẾP TỤC", 300f, ContinueFromMenu);
+        newGameButton = CreateButton(canvasRect, "NewGame_Button", "TRÒ CHƠI MỚI", 384f, StartNewGame);
         newGameRect = newGameButton.GetComponent<RectTransform>();
         CreateButton(canvasRect, "Settings_Button", "CÀI ĐẶT", 468f, OpenSettings);
-        CreateButton(canvasRect, "Credits_Button", "ĐỘI NGŨ", 552f, null);
-        CreateButton(canvasRect, "Quit_Button", "THOÁT", 636f, null);
+        CreateButton(canvasRect, "Credits_Button", "ĐỘI NGŨ", 552f, OpenCredits);
+        CreateButton(canvasRect, "Quit_Button", "THOÁT", 636f, RequestQuit);
+        returnToMainMenuButton = CreateButton(canvasRect, "ReturnToMainMenu_Button", "QUAY VỀ MENU CHÍNH", 720f, ReturnToMainMenu);
 
         TextMeshProUGUI tip = CreateText("Tip", canvasRect, "Một căn phòng bị lãng quên đang chờ bạn.", 17f, FontStyles.Italic, new Color(0.82f, 0.72f, 0.66f, 0.82f));
         tip.rectTransform.anchorMin = new Vector2(0f, 0f);
@@ -387,6 +535,114 @@ public sealed class RoomEightMainMenu : MonoBehaviour
         footer.rectTransform.sizeDelta = new Vector2(460f, 30f);
         footer.rectTransform.anchoredPosition = new Vector2(88f, 40f);
         footer.characterSpacing = 1.2f;
+        UpdateButtonStates();
+    }
+
+    public void OpenCredits()
+    {
+        if (!isInMenu) return;
+        if (creditsOverlay == null)
+            creditsOverlay = BuildModal("03:17 – VÒNG LẶP TẾ HỒN", "NHÓM 17\n\n- Lương Hữu Thiện\n- Nguyễn Hồng Phúc Thọ\n- Hoàng Bình Quân\n- Nguyễn Minh Long", "QUAY LẠI", CloseCredits, null, null);
+        else creditsOverlay.SetActive(true);
+    }
+
+    private void CloseCredits()
+    {
+        if (creditsOverlay != null) creditsOverlay.SetActive(false);
+    }
+
+    public void RequestQuit()
+    {
+        if (!isInMenu) return;
+        if (quitOverlay == null)
+            quitOverlay = BuildModal("THOÁT TRÒ CHƠI", "Bạn có chắc chắn muốn thoát trò chơi?", "XÁC NHẬN THOÁT", ConfirmQuit, "HỦY", CloseQuitConfirmation);
+        else quitOverlay.SetActive(true);
+    }
+
+    private void CloseQuitConfirmation()
+    {
+        if (quitOverlay != null) quitOverlay.SetActive(false);
+    }
+
+    private void RequestRestart()
+    {
+        if (restartOverlay == null)
+            restartOverlay = BuildModal("TRÒ CHƠI MỚI", "Bạn có muốn bắt đầu trò chơi mới? Tiến trình chưa lưu sẽ bị mất.", "BẮT ĐẦU LẠI", ConfirmRestart, "HỦY", CloseRestartConfirmation);
+        else restartOverlay.SetActive(true);
+    }
+
+    private void CloseRestartConfirmation()
+    {
+        if (restartOverlay != null) restartOverlay.SetActive(false);
+    }
+
+    private void ConfirmRestart()
+    {
+        Scene activeScene = SceneManager.GetActiveScene();
+        if (string.IsNullOrEmpty(activeScene.path) || SceneUtility.GetBuildIndexByScenePath(activeScene.path) < 0)
+        {
+            Debug.LogError("[RoomEightMainMenu] Cannot restart: add " + activeScene.path + " to enabled Build Settings first.");
+            return;
+        }
+
+        Time.timeScale = 1f;
+        IsPauseActive = false;
+        AudioListener.pause = false;
+        SceneManager.LoadScene(activeScene.buildIndex);
+    }
+
+    private static bool IsOverlayOpen(GameObject overlay)
+    {
+        return overlay != null && overlay.activeSelf;
+    }
+
+    private void ConfirmQuit()
+    {
+#if UNITY_EDITOR
+        UnityEditor.EditorApplication.isPlaying = false;
+#else
+        Application.Quit();
+#endif
+    }
+
+    private GameObject BuildModal(string title, string message, string primaryLabel, UnityEngine.Events.UnityAction primaryAction, string secondaryLabel, UnityEngine.Events.UnityAction secondaryAction)
+    {
+        GameObject overlay = new GameObject("Menu_Modal", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        overlay.transform.SetParent(menuCanvas.transform, false);
+        RectTransform overlayRect = overlay.GetComponent<RectTransform>();
+        Stretch(overlayRect, Vector2.zero, Vector2.zero);
+        overlay.GetComponent<Image>().color = new Color(0f, 0f, 0f, .78f);
+
+        Image card = CreateImage("Card", overlayRect, new Color(.03f, .008f, .006f, .98f));
+        RectTransform cardRect = card.rectTransform;
+        cardRect.anchorMin = cardRect.anchorMax = new Vector2(.5f, .5f);
+        cardRect.pivot = new Vector2(.5f, .5f);
+        cardRect.sizeDelta = new Vector2(720f, 430f);
+
+        TextMeshProUGUI heading = CreateText("Title", cardRect, title, 34f, FontStyles.Bold, new Color(.95f, .08f, .04f));
+        heading.rectTransform.anchorMin = new Vector2(.08f, .74f);
+        heading.rectTransform.anchorMax = new Vector2(.92f, .93f);
+        heading.alignment = TextAlignmentOptions.Center;
+        TextMeshProUGUI body = CreateText("Body", cardRect, message, 23f, FontStyles.Normal, Color.white);
+        body.rectTransform.anchorMin = new Vector2(.1f, .30f);
+        body.rectTransform.anchorMax = new Vector2(.9f, .70f);
+        body.alignment = TextAlignmentOptions.Center;
+        body.enableWordWrapping = true;
+
+        Button primary = CreateSettingsButton(cardRect, "Primary", primaryLabel, primaryAction);
+        RectTransform primaryRect = primary.GetComponent<RectTransform>();
+        primaryRect.anchorMin = primaryRect.anchorMax = new Vector2(secondaryAction == null ? .5f : .31f, .12f);
+        primaryRect.pivot = new Vector2(.5f, .5f);
+        primaryRect.sizeDelta = new Vector2(250f, 56f);
+        if (secondaryAction != null)
+        {
+            Button secondary = CreateSettingsButton(cardRect, "Secondary", secondaryLabel, secondaryAction);
+            RectTransform secondaryRect = secondary.GetComponent<RectTransform>();
+            secondaryRect.anchorMin = secondaryRect.anchorMax = new Vector2(.69f, .12f);
+            secondaryRect.pivot = new Vector2(.5f, .5f);
+            secondaryRect.sizeDelta = new Vector2(180f, 56f);
+        }
+        return overlay;
     }
 
     private Button CreateButton(Transform parent, string objectName, string label, float topOffset, UnityEngine.Events.UnityAction onClick)

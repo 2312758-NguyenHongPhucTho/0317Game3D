@@ -1,11 +1,17 @@
-using UnityEngine;
 using System.Collections;
+using FpsHorrorKit;
+using UnityEngine;
 
 public class MotherGhostMovement : MonoBehaviour
 {
     [Header("PLAYER")]
     public Transform player;
     public float walkTriggerDistance = 2.5f;
+
+    [Header("DAMAGE")]
+    [Tooltip("Component PlayerHealth0317 trên Player. Nếu trống, script tự tìm từ Player Transform.")]
+    public PlayerHealth0317 playerHealth;
+    [Min(1)] public int damageAmount = 10;
 
     [Header("GHOST")]
     public GameObject ghostObject;
@@ -21,16 +27,17 @@ public class MotherGhostMovement : MonoBehaviour
     public float pointingSpeed = 1f;
 
     [Header("WALKING TOWARDS PLAYER")]
-    public float walkSpeed = 1.2f;        // Tốc độ đi bộ từ từ về phía player
-    public float stopDistance = 1.2f;     // Khoảng cách dừng lại khi tiến đến gần player
-    public float turnSpeed = 5f;          // Tốc độ xoay người nhìn player
-    public float maxWalkTime = 30f;       // Thời gian tối đa đi bộ
+    public float walkSpeed = 1.2f;
+    public float stopDistance = 1.2f;
+    public float turnSpeed = 5f;
+    public float maxWalkTime = 30f;
 
     [Header("TRANSITION")]
     public float transitionTime = 0.25f;
     public bool disappearAfterWalking = false;
 
-    private bool isWalkingToPlayer = false;
+    private bool isWalkingToPlayer;
+    private bool hasDealtDamage;
 
     private const string POINT = "Point";
     private const string WALK = "Walk";
@@ -38,27 +45,34 @@ public class MotherGhostMovement : MonoBehaviour
 
     private void Awake()
     {
-        if (ghostRoot == null && ghostObject != null)
+        if (ghostObject == null)
+        {
+            Debug.LogError("[03:17] Chưa gán Ghost Object!", this);
+            enabled = false;
+            return;
+        }
+
+        if (ghostRoot == null)
             ghostRoot = ghostObject.transform;
 
-        if (ghostAnimation == null && ghostObject != null)
+        if (ghostAnimation == null)
         {
             ghostAnimation = ghostObject.GetComponentInChildren<Animation>(true);
-
             if (ghostAnimation == null)
                 ghostAnimation = ghostObject.AddComponent<Animation>();
         }
 
         if (ghostAnimation == null)
         {
-            Debug.LogError("Không tìm thấy Animation component!", this);
+            Debug.LogError("[03:17] Không tìm thấy Animation component!", this);
             enabled = false;
             return;
         }
 
+        FindPlayerHealth();
         ghostAnimation.playAutomatically = false;
 
-        // Tắt Animator để tránh xung đột với Legacy Animation
+        // Không dùng Animator song song với các clip Legacy trên cùng nhân vật.
         Animator[] animators = ghostObject.GetComponentsInChildren<Animator>(true);
         foreach (Animator animator in animators)
             animator.enabled = false;
@@ -67,13 +81,21 @@ public class MotherGhostMovement : MonoBehaviour
         AddClip(walkingClip, WALK, WrapMode.Loop);
         AddClip(idleClip, IDLE, WrapMode.Loop);
 
-        if (ghostObject != null)
-            ghostObject.SetActive(true);
+        ghostObject.SetActive(true);
+    }
+
+    private void FindPlayerHealth()
+    {
+        if (playerHealth == null && player != null)
+        {
+            playerHealth = player.GetComponent<PlayerHealth0317>();
+            if (playerHealth == null)
+                playerHealth = player.GetComponentInParent<PlayerHealth0317>();
+        }
     }
 
     private void Start()
     {
-        // Ban đầu đứng tại chỗ và chỉ tay liên tục
         if (ghostAnimation[POINT] != null)
         {
             ghostAnimation[POINT].speed = pointingSpeed;
@@ -81,14 +103,13 @@ public class MotherGhostMovement : MonoBehaviour
         }
         else
         {
-            Debug.LogError("Chưa gắn Pointing Clip!", this);
+            Debug.LogWarning("[03:17] Chưa gắn Pointing Clip!", this);
         }
     }
 
     private void AddClip(AnimationClip clip, string clipName, WrapMode wrapMode)
     {
-        if (clip == null)
-            return;
+        if (clip == null) return;
 
         if (!clip.legacy)
         {
@@ -105,20 +126,14 @@ public class MotherGhostMovement : MonoBehaviour
 
     private void Update()
     {
-        if (isWalkingToPlayer || player == null || ghostRoot == null)
-            return;
+        if (isWalkingToPlayer || player == null || ghostRoot == null) return;
 
-        Vector3 playerPosition = player.position;
-        Vector3 ghostPosition = ghostRoot.position;
+        Vector3 flatPlayerPosition = player.position;
+        Vector3 flatGhostPosition = ghostRoot.position;
+        flatPlayerPosition.y = 0f;
+        flatGhostPosition.y = 0f;
 
-        // Chỉ tính khoảng cách trên mặt đất (mặt phẳng XZ)
-        playerPosition.y = 0f;
-        ghostPosition.y = 0f;
-
-        float distance = Vector3.Distance(playerPosition, ghostPosition);
-
-        // Người chơi lại gần -> bắt đầu đi bộ về phía player
-        if (distance <= walkTriggerDistance)
+        if (Vector3.Distance(flatPlayerPosition, flatGhostPosition) <= walkTriggerDistance)
         {
             isWalkingToPlayer = true;
             StartCoroutine(WalkTowardsPlayerRoutine());
@@ -129,52 +144,62 @@ public class MotherGhostMovement : MonoBehaviour
     {
         if (player == null || ghostAnimation[WALK] == null)
         {
-            Debug.LogError("Chưa gắn Player hoặc Walking Clip!", this);
+            Debug.LogError("[03:17] Chưa gắn Player hoặc Walking Clip!", this);
             yield break;
         }
 
-        // Chuyển từ trạng thái chỉ tay sang đi bộ
         AnimationState walkAnim = ghostAnimation[WALK];
         walkAnim.time = 0f;
         walkAnim.speed = 1f;
-
         ghostAnimation.CrossFade(WALK, transitionTime);
 
         float timer = 0f;
-
-        // Liên tục tiến về phía Player đang di chuyển
+        bool reachedPlayer = false;
         while (timer < maxWalkTime)
         {
             if (player == null) break;
 
             Vector3 targetPosition = player.position;
             Vector3 direction = targetPosition - ghostRoot.position;
-            direction.y = 0f; // Giữ hướng trên mặt đất
+            direction.y = 0f;
 
-            // Nếu đã đến gần player trong khoảng cho phép thì dừng lại
             if (direction.magnitude <= stopDistance)
+            {
+                reachedPlayer = true;
                 break;
+            }
 
-            // Xoay mặt từ từ về phía Player
-            Quaternion targetRotation = Quaternion.LookRotation(direction.normalized);
-            ghostRoot.rotation = Quaternion.Slerp(
-                ghostRoot.rotation,
-                targetRotation,
-                turnSpeed * Time.deltaTime
-            );
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(direction.normalized);
+                ghostRoot.rotation = Quaternion.Slerp(ghostRoot.rotation, targetRotation, turnSpeed * Time.deltaTime);
+            }
 
-            // Di chuyển đi bộ từ từ về hướng Player
             ghostRoot.position = Vector3.MoveTowards(
                 ghostRoot.position,
                 new Vector3(targetPosition.x, ghostRoot.position.y, targetPosition.z),
-                walkSpeed * Time.deltaTime
-            );
+                walkSpeed * Time.deltaTime);
 
             timer += Time.deltaTime;
             yield return null;
         }
 
-        // Khi đi tới nơi / sát player: Chuyển sang Idle hoặc biến mất
+        // Chỉ gây sát thương khi đã thực sự đi tới khoảng cách dừng; tối đa một lần.
+        if (reachedPlayer && !hasDealtDamage)
+        {
+            hasDealtDamage = true;
+            FindPlayerHealth();
+            if (playerHealth != null)
+            {
+                if (playerHealth.TakeTrapDamage(damageAmount))
+                    Debug.Log($"[03:17] Ma mẹ gây {damageAmount} sát thương khi đến gần Player.", this);
+            }
+            else
+            {
+                Debug.LogWarning("[03:17] Không tìm thấy PlayerHealth0317: ma mẹ không trừ HP.", this);
+            }
+        }
+
         if (disappearAfterWalking)
         {
             ghostObject.SetActive(false);

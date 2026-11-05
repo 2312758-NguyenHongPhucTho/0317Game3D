@@ -2,6 +2,7 @@ using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace FpsHorrorKit
@@ -68,6 +69,7 @@ namespace FpsHorrorKit
         [TextArea(2, 3)] [SerializeField] private string chaseLine = "Mày chính là vật hiến tế cuối cùng!";
         [SerializeField, Min(0.1f)] private float introLine1Seconds = 2.8f;
         [SerializeField, Min(0.1f)] private float introLine2Seconds = 3.2f;
+        [SerializeField, Min(0.1f)] private float skipHoldSeconds = 1.5f;
 
         [Header("Loop 2 Ending Orbit")]
         [SerializeField] private Transform orbitCenter;
@@ -112,6 +114,14 @@ namespace FpsHorrorKit
         private Image blackImage;
         private TextMeshProUGUI subtitleText;
         private TextMeshProUGUI endingTitleText;
+        private FpsAssetsInputs fpsInputs;
+        private Coroutine stageRoutine;
+        private Coroutine skipRoutine;
+        private GameObject skipRoot;
+        private Image skipProgress;
+        private float skipHeldSeconds;
+        private bool skipArmed = true;
+        private bool skipTriggered;
 
         public bool IsLoop2Ready { get { return stage == Stage.Loop2; } }
 
@@ -124,6 +134,7 @@ namespace FpsHorrorKit
                 playerCharacterController = playerRoot.GetComponent<CharacterController>();
             if (playerHealth == null && playerRoot != null)
                 playerHealth = playerRoot.GetComponent<PlayerHealth0317>();
+            if (playerRoot != null) fpsInputs = playerRoot.GetComponent<FpsAssetsInputs>();
 
             if (gameplayCamera != null)
             {
@@ -166,27 +177,29 @@ namespace FpsHorrorKit
             lamActor.SetActive(true);
             FaceLamAtPlayer();
             PlaySfx(doorSlamSound);
-            StartCoroutine(IntroductionRoutine());
+            stageRoutine = StartCoroutine(IntroductionRoutine());
         }
 
         private IEnumerator IntroductionRoutine()
         {
             SwitchCamera(lamCloseupCamera);
             SetSubtitle(line1);
-            yield return new WaitForSecondsRealtime(introLine1Seconds);
+            yield return WaitRealtime(introLine1Seconds);
             SetSubtitle(line2);
-            yield return new WaitForSecondsRealtime(introLine2Seconds);
+            yield return WaitRealtime(introLine2Seconds);
             SwitchCamera(gameplayCamera);
             SetSubtitle(chaseLine);
             RestoreControls();
             stage = Stage.Chase;
             nextHitTime = Time.unscaledTime + 0.5f;
-            yield return new WaitForSecondsRealtime(2f);
+            yield return WaitRealtime(2f);
             if (stage == Stage.Chase) SetSubtitle("");
         }
 
         private void Update()
         {
+            if (RoomEightMainMenu.IsPauseActive) return;
+            UpdateSkipHold();
             if (stage != Stage.Chase || lamActor == null || playerRoot == null) return;
             Vector3 target = playerRoot.position;
             target.y = lamActor.transform.position.y; // Demo flat-floor chase, no NavMesh.
@@ -220,7 +233,7 @@ namespace FpsHorrorKit
             {
                 stage = Stage.Dying;
                 SetBloodAlpha(0.93f);
-                StartCoroutine(DeathRoutine());
+                stageRoutine = StartCoroutine(DeathRoutine());
             }
             else
             {
@@ -236,6 +249,7 @@ namespace FpsHorrorKit
             float elapsed = 0f;
             while (elapsed < seconds)
             {
+                if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
                 elapsed += Time.unscaledDeltaTime;
                 cam.localPosition = origin + Random.insideUnitSphere * magnitude;
                 yield return null;
@@ -255,6 +269,7 @@ namespace FpsHorrorKit
             float elapsed = 0f;
             while (elapsed < fallDuration)
             {
+                if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.SmoothStep(0, 1, Mathf.Clamp01(elapsed / fallDuration));
                 gameplayCamera.transform.localPosition = Vector3.Lerp(cameraOriginalLocalPosition, destinationPosition, t);
@@ -265,7 +280,7 @@ namespace FpsHorrorKit
             // Link your project's EXISTING Blink component through this UnityEvent.
             onBlinkRequested?.Invoke();
             yield return FadeBlack(0f, 1f, blackoutFadeDuration);
-            yield return new WaitForSecondsRealtime(blackHoldSeconds);
+            yield return WaitRealtime(blackHoldSeconds);
 
             // Reset only the player, NOT the whole scene: destroyed dolls stay destroyed.
             RespawnAtBedWhileBlack();
@@ -305,7 +320,7 @@ namespace FpsHorrorKit
 
         private IEnumerator ClearSubtitleAfter(float seconds)
         {
-            yield return new WaitForSecondsRealtime(seconds);
+            yield return WaitRealtime(seconds);
             if (stage == Stage.Loop2) SetSubtitle("");
         }
 
@@ -320,7 +335,7 @@ namespace FpsHorrorKit
             }
             stage = Stage.Ending;
             SaveAndDisableControls();
-            StartCoroutine(EndingRoutine());
+            stageRoutine = StartCoroutine(EndingRoutine());
         }
 
         private IEnumerator EndingRoutine()
@@ -328,7 +343,7 @@ namespace FpsHorrorKit
             // Let players see Lam at the altar and their own body first.
             SetSubtitle("Không... người nằm trong vòng tế... là mình sao?");
             if (observeRoomSeconds > 0f)
-                yield return new WaitForSecondsRealtime(observeRoomSeconds);
+                yield return WaitRealtime(observeRoomSeconds);
             SetSubtitle("");
             SwitchCamera(endingOrbitCamera);
             onEndingStarted?.Invoke();
@@ -340,6 +355,7 @@ namespace FpsHorrorKit
             float elapsed = 0f;
             while (elapsed < orbitDuration)
             {
+                if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
                 elapsed += Time.unscaledDeltaTime;
                 float t = Mathf.Clamp01(elapsed / orbitDuration);
                 float degrees = orbitStartingAngle + orbitTotalDegrees * t;
@@ -362,6 +378,74 @@ namespace FpsHorrorKit
             onEndingFinished?.Invoke();
             Cursor.visible = true;
             Cursor.lockState = CursorLockMode.None;
+        }
+
+        private void UpdateSkipHold()
+        {
+            if (RoomEightMainMenu.IsPauseActive) { SetSkipProgress(0f); return; }
+            var space = Keyboard.current != null ? Keyboard.current.spaceKey : null;
+            if (space == null || !space.isPressed)
+            {
+                skipArmed = true;
+                skipTriggered = false;
+                skipHeldSeconds = 0f;
+            }
+
+            bool eligible = stage == Stage.Introduction || stage == Stage.Dying || stage == Stage.Ending;
+            if (skipRoot != null) skipRoot.SetActive(eligible && !skipTriggered);
+            if (!eligible || skipTriggered) { SetSkipProgress(0f); return; }
+
+            if (fpsInputs != null) fpsInputs.jump = false;
+            if (!skipArmed || space == null || !space.isPressed) { SetSkipProgress(0f); return; }
+
+            skipHeldSeconds += Time.unscaledDeltaTime;
+            SetSkipProgress(skipHeldSeconds / Mathf.Max(.1f, skipHoldSeconds));
+            if (skipHeldSeconds < skipHoldSeconds) return;
+
+            skipTriggered = true;
+            skipArmed = false;
+            if (stageRoutine != null) StopCoroutine(stageRoutine);
+            skipRoutine = StartCoroutine(SkipCurrentStage(stage));
+        }
+
+        private IEnumerator SkipCurrentStage(Stage skippedStage)
+        {
+            if (sfxSource != null) sfxSource.Stop();
+            SetSubtitle("");
+            if (skipRoot != null) skipRoot.SetActive(false);
+
+            if (skippedStage == Stage.Introduction)
+            {
+                SwitchCamera(gameplayCamera);
+                RestoreControls();
+                stage = Stage.Chase;
+                nextHitTime = Time.unscaledTime + .5f;
+            }
+            else if (skippedStage == Stage.Dying)
+            {
+                hitInProgress = false;
+                SetAlpha(blackImage, 1f);
+                RespawnAtBedWhileBlack();
+                yield return FadeBlack(1f, 0f, wakeFadeDuration);
+                SetBloodAlpha(0f);
+                RestoreControls();
+                stage = Stage.Loop2;
+                onLoop2Started?.Invoke();
+            }
+            else if (skippedStage == Stage.Ending)
+            {
+                SetAlpha(blackImage, 1f);
+                if (endingMusic != null) endingMusic.Stop();
+                if (optionalEndingPanel != null) optionalEndingPanel.SetActive(true);
+                else if (endingTitleText != null) endingTitleText.gameObject.SetActive(true);
+                stage = Stage.Complete;
+                onEndingFinished?.Invoke();
+                Cursor.visible = true;
+                Cursor.lockState = CursorLockMode.None;
+            }
+
+            stageRoutine = null;
+            skipRoutine = null;
         }
 
         private void FaceLamAtPlayer()
@@ -413,11 +497,22 @@ namespace FpsHorrorKit
             if (sfxSource != null && clip != null) sfxSource.PlayOneShot(clip);
         }
 
+        private static IEnumerator WaitRealtime(float seconds)
+        {
+            float elapsed = 0f;
+            while (elapsed < seconds)
+            {
+                if (!RoomEightMainMenu.IsPauseActive) elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+
         private IEnumerator FadeBlack(float from, float to, float duration)
         {
             float elapsed = 0f;
             while (elapsed < duration)
             {
+                if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
                 elapsed += Time.unscaledDeltaTime;
                 float a = Mathf.Lerp(from, to, Mathf.Clamp01(elapsed / Mathf.Max(0.01f, duration)));
                 SetAlpha(blackImage, a);
@@ -490,6 +585,57 @@ namespace FpsHorrorKit
             endingTitleText.text = "03:17\nVÒNG LẶP TẾ HỒN\n\nTHE END";
             endingTitleText.raycastTarget = false;
             endGo.SetActive(false);
+
+            CreateSkipUI(canvasTransform);
+        }
+
+        private void CreateSkipUI(Transform parent)
+        {
+            skipRoot = new GameObject("SkipHint", typeof(RectTransform), typeof(Image));
+            skipRoot.transform.SetParent(parent, false);
+            RectTransform rootRect = skipRoot.GetComponent<RectTransform>();
+            rootRect.anchorMin = rootRect.anchorMax = new Vector2(1f, 1f);
+            rootRect.pivot = new Vector2(1f, 1f);
+            rootRect.sizeDelta = new Vector2(280f, 66f);
+            rootRect.anchoredPosition = new Vector2(-28f, -28f);
+            Image background = skipRoot.GetComponent<Image>();
+            background.color = new Color(0f, 0f, 0f, .55f);
+            background.raycastTarget = false;
+
+            GameObject labelObject = new GameObject("Label", typeof(RectTransform), typeof(TextMeshProUGUI));
+            labelObject.transform.SetParent(skipRoot.transform, false);
+            RectTransform labelRect = labelObject.GetComponent<RectTransform>();
+            labelRect.anchorMin = new Vector2(0f, .42f);
+            labelRect.anchorMax = Vector2.one;
+            labelRect.offsetMin = Vector2.zero;
+            labelRect.offsetMax = Vector2.zero;
+            TextMeshProUGUI label = labelObject.GetComponent<TextMeshProUGUI>();
+            if (vietnameseFont != null) label.font = vietnameseFont;
+            label.text = "Giữ [SPACE] để bỏ qua";
+            label.fontSize = 20f;
+            label.alignment = TextAlignmentOptions.Center;
+            label.color = Color.white;
+            label.raycastTarget = false;
+
+            GameObject progressObject = new GameObject("Progress", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            progressObject.transform.SetParent(skipRoot.transform, false);
+            RectTransform progressRect = progressObject.GetComponent<RectTransform>();
+            progressRect.anchorMin = new Vector2(.08f, .14f);
+            progressRect.anchorMax = new Vector2(.92f, .30f);
+            progressRect.offsetMin = Vector2.zero;
+            progressRect.offsetMax = Vector2.zero;
+            skipProgress = progressObject.GetComponent<Image>();
+            skipProgress.type = Image.Type.Filled;
+            skipProgress.fillMethod = Image.FillMethod.Horizontal;
+            skipProgress.fillAmount = 0f;
+            skipProgress.color = new Color(.85f, .16f, .12f, 1f);
+            skipProgress.raycastTarget = false;
+            skipRoot.SetActive(false);
+        }
+
+        private void SetSkipProgress(float value)
+        {
+            if (skipProgress != null) skipProgress.fillAmount = Mathf.Clamp01(value);
         }
 
         private static Image CreateFullScreenImage(string name, Transform parent, Sprite sprite, Color color)

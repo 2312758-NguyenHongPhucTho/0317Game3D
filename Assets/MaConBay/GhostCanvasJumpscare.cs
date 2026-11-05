@@ -1,73 +1,76 @@
-using UnityEngine;
-using UnityEngine.UI; // Cần thiết để code tự tạo UI Image
 using System.Collections;
+using FpsHorrorKit;
+using UnityEngine;
+using UnityEngine.UI;
 
 public class GhostAutoCanvasJumpscare : MonoBehaviour
 {
     [Header("TARGETS")]
-    [Tooltip("Kéo thả Object Player vào đây")]
+    [Tooltip("Kéo Player thật (object có PlayerHealth0317) vào đây.")]
     public GameObject playerObject;
 
-    [Tooltip("Kéo file ảnh con ma vào đây (Nhớ đổi ảnh thành đuôi Sprite 2D)")]
+    [Tooltip("Ảnh con ma, import dưới dạng Sprite (2D and UI).")]
     public Sprite ghostSprite;
 
+    [Header("DAMAGE")]
+    [Tooltip("Component máu sẵn có trên Player. Nếu bỏ trống, script sẽ tự tìm từ Player Object.")]
+    public PlayerHealth0317 playerHealth;
+
+    [Min(1)] public int damageAmount = 10;
+
     [Header("SETTINGS")]
-    [Tooltip("Khoảng cách kích hoạt (mét)")]
-    public float triggerDistance = 1.5f;
-
-    [Tooltip("Thời gian chờ trước khi ma xuất hiện (giây)")]
-    public float delayBeforeShow = 3f;
-
-    [Tooltip("Thời gian hình ma hiển thị trên màn hình (giây)")]
-    public float showDuration = 2f;
-
-    [Tooltip("Bật: Chỉ dọa 1 lần duy nhất trong toàn bộ màn chơi")]
+    [Min(0.1f)] public float triggerDistance = 1.5f;
+    [Min(0f)] public float delayBeforeShow = 3f;
+    [Min(0.1f)] public float showDuration = 2f;
     public bool triggerOnlyOnce = true;
 
-    private bool hasTriggered = false;
-    private bool isSequenceRunning = false;
-
-    // Biến lưu trữ Canvas do code tự tạo ra
+    private bool hasTriggered;
+    private bool isSequenceRunning;
     private GameObject autoCanvas;
+    private Coroutine sequence;
 
     private void Start()
     {
+        FindPlayerHealth();
         CreateFullscreenCanvas();
     }
 
-    // Hàm này giúp tự động tạo Canvas và Image full màn hình bằng Code
+    private void FindPlayerHealth()
+    {
+        if (playerHealth == null && playerObject != null)
+        {
+            playerHealth = playerObject.GetComponent<PlayerHealth0317>();
+            if (playerHealth == null)
+                playerHealth = playerObject.GetComponentInParent<PlayerHealth0317>();
+        }
+    }
+
     private void CreateFullscreenCanvas()
     {
         if (ghostSprite == null)
         {
-            Debug.LogError("Bạn chưa kéo ảnh con ma vào ô Ghost Sprite trên Inspector!", this);
+            Debug.LogError("[03:17] Chưa gán Ghost Sprite cho jumpscare!", this);
             return;
         }
 
-        // 1. Tạo Canvas
-        autoCanvas = new GameObject("AutoJumpscareCanvas");
-        Canvas canvasComp = autoCanvas.AddComponent<Canvas>();
+        autoCanvas = new GameObject("AutoJumpscareCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+        Canvas canvasComp = autoCanvas.GetComponent<Canvas>();
         canvasComp.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasComp.sortingOrder = 999; // Đặt số thật cao để ảnh ma đè lên mọi UI khác
+        canvasComp.sortingOrder = 999;
 
-        autoCanvas.AddComponent<CanvasScaler>();
-        autoCanvas.AddComponent<GraphicRaycaster>();
-
-        // 2. Tạo Image con chứa ảnh ma
-        GameObject imageObj = new GameObject("GhostImage");
+        GameObject imageObj = new GameObject("GhostImage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
         imageObj.transform.SetParent(autoCanvas.transform, false);
 
-        Image imgComp = imageObj.AddComponent<Image>();
+        Image imgComp = imageObj.GetComponent<Image>();
         imgComp.sprite = ghostSprite;
+        imgComp.raycastTarget = false;
 
-        // 3. Căn chỉnh Image tự động kéo giãn full màn hình
         RectTransform rect = imageObj.GetComponent<RectTransform>();
-        rect.anchorMin = new Vector2(0, 0); // Góc dưới trái
-        rect.anchorMax = new Vector2(1, 1); // Góc trên phải
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
 
-        // 4. Ẩn Canvas đi, chờ khi nào Player tới gần mới bật
         autoCanvas.SetActive(false);
     }
 
@@ -77,13 +80,9 @@ public class GhostAutoCanvasJumpscare : MonoBehaviour
         if (triggerOnlyOnce && hasTriggered) return;
         if (isSequenceRunning) return;
 
-        // Tính khoảng cách
         float distance = Vector3.Distance(transform.position, playerObject.transform.position);
-
         if (distance <= triggerDistance)
-        {
-            StartCoroutine(JumpscareSequence());
-        }
+            sequence = StartCoroutine(JumpscareSequence());
     }
 
     private IEnumerator JumpscareSequence()
@@ -91,19 +90,46 @@ public class GhostAutoCanvasJumpscare : MonoBehaviour
         hasTriggered = true;
         isSequenceRunning = true;
 
-        // Chờ 3 giây
         yield return new WaitForSeconds(delayBeforeShow);
 
-        // Bật màn hình
         autoCanvas.SetActive(true);
-        Debug.Log("Jumpscare!");
+        DealDamageOnceForThisJumpscare();
+        Debug.Log("[03:17] Jumpscare xuất hiện!", this);
 
-        // Hiện trong 2 giây
         yield return new WaitForSeconds(showDuration);
 
-        // Tắt màn hình
         autoCanvas.SetActive(false);
-
         isSequenceRunning = false;
+        sequence = null;
+    }
+
+    private void DealDamageOnceForThisJumpscare()
+    {
+        FindPlayerHealth();
+        if (playerHealth == null)
+        {
+            Debug.LogWarning("[03:17] Không tìm thấy PlayerHealth0317: jumpscare không trừ HP.", this);
+            return;
+        }
+
+        // Dùng hệ thống HP hiện có, bao gồm miễn sát thương ngắn và xử lý HP = 0.
+        if (playerHealth.TakeTrapDamage(damageAmount))
+            Debug.Log($"[03:17] Jumpscare gây {damageAmount} sát thương.", this);
+    }
+
+    private void OnDestroy()
+    { if (gameObject != null)
+        if (autoCanvas != null) Destroy(autoCanvas);
+    }
+
+    private void OnDisable()
+    {
+        if (sequence != null)
+        {
+            StopCoroutine(sequence);
+            sequence = null;
+        }
+        isSequenceRunning = false;
+        if (autoCanvas != null) autoCanvas.SetActive(false);
     }
 }
