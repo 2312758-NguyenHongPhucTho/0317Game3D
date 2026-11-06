@@ -8,7 +8,12 @@ ModelImporter:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
       name: ZombieGirl_Material
-    second: {fileID: 34641966704817699, guid: aaaaec34e6b093c4bb973c22a64f7c28, type: 3}
+    second: {fileID: 2100000, guid: d27e98bcaecde6c43b76706e3ca34656, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: ZombieGirl_body_Material
+    second: {fileID: 2100000, guid: d27e98bcaecde6c43b76706e3ca34656, type: 2}
   - first:
       type: UnityEngine:Texture2D
       assembly: UnityEngine.CoreModule

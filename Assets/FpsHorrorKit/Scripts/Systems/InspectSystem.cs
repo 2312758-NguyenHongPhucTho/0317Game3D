@@ -68,6 +68,10 @@ namespace FpsHorrorKit
         private static TextMeshProUGUI _captionText;
         private static InspectSystem _captionOwner;
 
+        // Thông báo khi vật phẩm đã được trả về đúng vị trí sau thao tác Q.
+        // Chỉ radio nào có RadioInspectMusic0317 đăng ký mới phát nhạc.
+        public event System.Action InspectionReturned;
+
         private void Awake()
         {
             _collider = GetComponent<Collider>();
@@ -476,6 +480,10 @@ namespace FpsHorrorKit
             ToggleCollider(
                 enableColliderWhenFinished
             );
+
+            // Chỉ phát sự kiện khi Q trả vật phẩm XONG, không phát khi E nhấc lên.
+            if (enableColliderWhenFinished)
+                InspectionReturned?.Invoke();
         }
 
         private void ToggleCollider(bool isActive)

@@ -24,6 +24,7 @@ namespace FpsHorrorKit
         [SerializeField] private PlayerInteract playerInteract;
         [SerializeField] private FpsAssetsInputs inputs;
         [SerializeField] private AudioSource audioSource;
+        [SerializeField] private AudioSource dialogueSource;
         [SerializeField] private AudioClip knockClip;
         [SerializeField] private AudioClip[] dialogueAudio;
         [SerializeField] private TMP_FontAsset vietnameseFont;
@@ -76,9 +77,11 @@ namespace FpsHorrorKit
         private float skipHeldSeconds;
         private bool skipArmed = true;
         private bool skipTriggered;
+        private bool dialoguePausedForMenu;
 
         private void Update()
         {
+            SyncDialoguePause();
             UpdateSkipHold();
         }
 
@@ -180,7 +183,8 @@ namespace FpsHorrorKit
             SplitLine(lines[index], out speaker, out content);
             SetSubtitle(speaker, content);
             AudioClip voiceClip = dialogueAudio != null && index < dialogueAudio.Length ? dialogueAudio[index] : null;
-            if (voiceClip != null) Play(voiceClip);
+            if (voiceClip != null) PlayDialogue(voiceClip);
+            else Debug.LogWarning("[03:17] Opening dialogue audio is unassigned for line " + index + ".", this);
             while (inputs != null && inputs.interact) yield return null;
 
             float duration = Mathf.Max(minimumLineSeconds, content.Length / readingCharactersPerSecond);
@@ -195,7 +199,7 @@ namespace FpsHorrorKit
                 {
                     ClearInteractInput();
                     // Dừng câu thoại đang phát trước khi chuyển sang câu tiếp theo.
-                    if (voiceClip != null && audioSource != null) audioSource.Stop();
+                    StopDialogue();
                     yield break;
                 }
                 yield return null;
@@ -387,6 +391,7 @@ namespace FpsHorrorKit
         {
             SaveAndLockControls();
             if (audioSource != null) audioSource.Stop();
+            StopDialogue();
             SetSubtitle(string.Empty, string.Empty);
             if (skipRoot != null) skipRoot.SetActive(false);
             SetFade(1f);
@@ -531,6 +536,42 @@ namespace FpsHorrorKit
         }
 
         private void Play(AudioClip clip) { if (audioSource != null && clip != null) audioSource.PlayOneShot(clip); }
+
+        private void PlayDialogue(AudioClip clip)
+        {
+            if (dialogueSource == null)
+            {
+                Debug.LogWarning("[03:17] Opening dialogue AudioSource is unassigned.", this);
+                return;
+            }
+            dialogueSource.Stop();
+            dialogueSource.clip = clip;
+            dialogueSource.Play();
+        }
+
+        private void StopDialogue()
+        {
+            dialoguePausedForMenu = false;
+            if (dialogueSource != null) dialogueSource.Stop();
+        }
+
+        private void SyncDialoguePause()
+        {
+            if (dialogueSource == null) return;
+            if (RoomEightMainMenu.IsPauseActive)
+            {
+                if (dialogueSource.isPlaying)
+                {
+                    dialogueSource.Pause();
+                    dialoguePausedForMenu = true;
+                }
+            }
+            else if (dialoguePausedForMenu)
+            {
+                dialogueSource.UnPause();
+                dialoguePausedForMenu = false;
+            }
+        }
         private void ClearInteractInput() { if (inputs != null) inputs.interact = false; }
 
         private void Complete()

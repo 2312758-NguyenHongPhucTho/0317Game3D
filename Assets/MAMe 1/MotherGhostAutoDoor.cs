@@ -9,7 +9,7 @@ public class MotherGhostMovement : MonoBehaviour
     public float walkTriggerDistance = 2.5f;
 
     [Header("DAMAGE")]
-    [Tooltip("Component PlayerHealth0317 trên Player. Nếu trống, script tự tìm từ Player Transform.")]
+    [Tooltip("PlayerHealth0317 tren Player. Neu trong, script tu tim tu Player Transform.")]
     public PlayerHealth0317 playerHealth;
     [Min(1)] public int damageAmount = 10;
 
@@ -32,12 +32,31 @@ public class MotherGhostMovement : MonoBehaviour
     public float turnSpeed = 5f;
     public float maxWalkTime = 30f;
 
+    [Header("MOVEMENT MODE")]
+    [Tooltip("Bat: ma duoi theo Player. Tat: ma di thang theo huong forward ban dau.")]
+    public bool followPlayer = true;
+    [Tooltip("So met ma di thang khi Follow Player = false.")]
+    [Min(0.1f)] public float straightWalkDistance = 6f;
+
+    [Header("GHOST AUDIO")]
+    [Tooltip("AudioSource de phat tieng ma. Nen gan AudioSource rieng, khong dung AudioSource nhac phong.")]
+    public AudioSource ghostAudioSource;
+    [Tooltip("Phat 1 lan khi ma xuat hien / bat dau animation chi tay.")]
+    public AudioClip appearanceSound;
+    [Tooltip("Phat 1 lan khi ma bat dau di hoac khi ma den sat Player.")]
+    public AudioClip scareSound;
+    [Range(0f, 1f)] public float appearanceVolume = 1f;
+    [Range(0f, 1f)] public float scareVolume = 1f;
+    [Tooltip("Bat: phat tieng hu ngay khi ma bat dau di. Tat: phat khi ma den gan Player trong stopDistance.")]
+    public bool scareWhenWalkingStarts = true;
+
     [Header("TRANSITION")]
     public float transitionTime = 0.25f;
     public bool disappearAfterWalking = false;
 
     private bool isWalkingToPlayer;
     private bool hasDealtDamage;
+    private bool hasPlayedScareSound;
 
     private const string POINT = "Point";
     private const string WALK = "Walk";
@@ -47,7 +66,7 @@ public class MotherGhostMovement : MonoBehaviour
     {
         if (ghostObject == null)
         {
-            Debug.LogError("[03:17] Chưa gán Ghost Object!", this);
+            Debug.LogError("[03:17] Chua gan Ghost Object!", this);
             enabled = false;
             return;
         }
@@ -62,17 +81,10 @@ public class MotherGhostMovement : MonoBehaviour
                 ghostAnimation = ghostObject.AddComponent<Animation>();
         }
 
-        if (ghostAnimation == null)
-        {
-            Debug.LogError("[03:17] Không tìm thấy Animation component!", this);
-            enabled = false;
-            return;
-        }
-
         FindPlayerHealth();
         ghostAnimation.playAutomatically = false;
 
-        // Không dùng Animator song song với các clip Legacy trên cùng nhân vật.
+        // Khong dung Animator song song voi Animation Legacy tren cung nhan vat.
         Animator[] animators = ghostObject.GetComponentsInChildren<Animator>(true);
         foreach (Animator animator in animators)
             animator.enabled = false;
@@ -80,6 +92,17 @@ public class MotherGhostMovement : MonoBehaviour
         AddClip(pointingClip, POINT, WrapMode.Loop);
         AddClip(walkingClip, WALK, WrapMode.Loop);
         AddClip(idleClip, IDLE, WrapMode.Loop);
+
+        // Chi tao AudioSource neu chua duoc gan trong Inspector.
+        if (ghostAudioSource == null)
+        {
+            ghostAudioSource = gameObject.AddComponent<AudioSource>();
+            ghostAudioSource.playOnAwake = false;
+            ghostAudioSource.loop = false;
+            ghostAudioSource.spatialBlend = 1f; // 3D: tieng ma phat ra tu vi tri object.
+            ghostAudioSource.minDistance = 1f;
+            ghostAudioSource.maxDistance = 18f;
+        }
 
         ghostObject.SetActive(true);
     }
@@ -103,8 +126,11 @@ public class MotherGhostMovement : MonoBehaviour
         }
         else
         {
-            Debug.LogWarning("[03:17] Chưa gắn Pointing Clip!", this);
+            Debug.LogWarning("[03:17] Chua gan Pointing Clip!", this);
         }
+
+        // Tieng xuat hien phat 1 lan khi script bat dau hoat dong.
+        PlaySound(appearanceSound, appearanceVolume);
     }
 
     private void AddClip(AnimationClip clip, string clipName, WrapMode wrapMode)
@@ -113,7 +139,7 @@ public class MotherGhostMovement : MonoBehaviour
 
         if (!clip.legacy)
         {
-            Debug.LogError(clip.name + " phải được import dạng Legacy!", this);
+            Debug.LogError(clip.name + " phai duoc import dang Legacy!", this);
             return;
         }
 
@@ -126,6 +152,7 @@ public class MotherGhostMovement : MonoBehaviour
 
     private void Update()
     {
+        if (Time.timeScale <= 0f) return; // Khong bat dau hu khi game dang Pause.
         if (isWalkingToPlayer || player == null || ghostRoot == null) return;
 
         Vector3 flatPlayerPosition = player.position;
@@ -144,7 +171,8 @@ public class MotherGhostMovement : MonoBehaviour
     {
         if (player == null || ghostAnimation[WALK] == null)
         {
-            Debug.LogError("[03:17] Chưa gắn Player hoặc Walking Clip!", this);
+            Debug.LogError("[03:17] Chua gan Player hoac Walking Clip!", this);
+            isWalkingToPlayer = false;
             yield break;
         }
 
@@ -153,51 +181,80 @@ public class MotherGhostMovement : MonoBehaviour
         walkAnim.speed = 1f;
         ghostAnimation.CrossFade(WALK, transitionTime);
 
+        if (scareWhenWalkingStarts)
+            PlayScareSoundOnce();
+
+        bool chasePlayer = followPlayer;
+        Vector3 straightDirection = ghostRoot.forward;
+        straightDirection.y = 0f;
+        if (straightDirection.sqrMagnitude < 0.0001f)
+            straightDirection = Vector3.forward;
+        straightDirection.Normalize();
+
+        float straightDistanceWalked = 0f;
         float timer = 0f;
         bool reachedPlayer = false;
+
         while (timer < maxWalkTime)
         {
             if (player == null) break;
 
-            Vector3 targetPosition = player.position;
-            Vector3 direction = targetPosition - ghostRoot.position;
-            direction.y = 0f;
-
-            if (direction.magnitude <= stopDistance)
+            if (chasePlayer)
             {
-                reachedPlayer = true;
-                break;
-            }
+                Vector3 targetPosition = player.position;
+                Vector3 direction = targetPosition - ghostRoot.position;
+                direction.y = 0f;
 
-            if (direction.sqrMagnitude > 0.0001f)
+                if (direction.magnitude <= stopDistance)
+                {
+                    reachedPlayer = true;
+                    break;
+                }
+
+                if (direction.sqrMagnitude > 0.0001f)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(direction.normalized);
+                    ghostRoot.rotation = Quaternion.Slerp(
+                        ghostRoot.rotation, targetRotation, turnSpeed * Time.deltaTime);
+                }
+
+                ghostRoot.position = Vector3.MoveTowards(
+                    ghostRoot.position,
+                    new Vector3(targetPosition.x, ghostRoot.position.y, targetPosition.z),
+                    walkSpeed * Time.deltaTime);
+            }
+            else
             {
-                Quaternion targetRotation = Quaternion.LookRotation(direction.normalized);
-                ghostRoot.rotation = Quaternion.Slerp(ghostRoot.rotation, targetRotation, turnSpeed * Time.deltaTime);
-            }
+                if (straightDistanceWalked >= straightWalkDistance)
+                    break;
 
-            ghostRoot.position = Vector3.MoveTowards(
-                ghostRoot.position,
-                new Vector3(targetPosition.x, ghostRoot.position.y, targetPosition.z),
-                walkSpeed * Time.deltaTime);
+                float step = Mathf.Min(
+                    Mathf.Max(0f, walkSpeed) * Time.deltaTime,
+                    straightWalkDistance - straightDistanceWalked);
+
+                ghostRoot.position += straightDirection * step;
+                straightDistanceWalked += step;
+
+                // Neu di thang ma van cham gan Player, van tru HP va phat tieng hu.
+                Vector3 difference = player.position - ghostRoot.position;
+                difference.y = 0f;
+                if (difference.magnitude <= stopDistance)
+                {
+                    if (!scareWhenWalkingStarts)
+                        PlayScareSoundOnce();
+                    DealDamageOnce();
+                }
+            }
 
             timer += Time.deltaTime;
             yield return null;
         }
 
-        // Chỉ gây sát thương khi đã thực sự đi tới khoảng cách dừng; tối đa một lần.
-        if (reachedPlayer && !hasDealtDamage)
+        if (chasePlayer && reachedPlayer)
         {
-            hasDealtDamage = true;
-            FindPlayerHealth();
-            if (playerHealth != null)
-            {
-                if (playerHealth.TakeTrapDamage(damageAmount))
-                    Debug.Log($"[03:17] Ma mẹ gây {damageAmount} sát thương khi đến gần Player.", this);
-            }
-            else
-            {
-                Debug.LogWarning("[03:17] Không tìm thấy PlayerHealth0317: ma mẹ không trừ HP.", this);
-            }
+            if (!scareWhenWalkingStarts)
+                PlayScareSoundOnce();
+            DealDamageOnce();
         }
 
         if (disappearAfterWalking)
@@ -211,6 +268,38 @@ public class MotherGhostMovement : MonoBehaviour
         else
         {
             walkAnim.speed = 0f;
+        }
+    }
+
+    private void PlaySound(AudioClip clip, float volume)
+    {
+        if (ghostAudioSource == null || clip == null) return;
+        ghostAudioSource.PlayOneShot(clip, volume);
+    }
+
+    private void PlayScareSoundOnce()
+    {
+        if (hasPlayedScareSound) return;
+        if (scareSound == null) return;
+
+        hasPlayedScareSound = true;
+        PlaySound(scareSound, scareVolume);
+    }
+
+    private void DealDamageOnce()
+    {
+        if (hasDealtDamage) return;
+        hasDealtDamage = true;
+        FindPlayerHealth();
+
+        if (playerHealth != null)
+        {
+            if (playerHealth.TakeTrapDamage(damageAmount))
+                Debug.Log($"[03:17] Ma me gay {damageAmount} sat thuong khi den gan Player.", this);
+        }
+        else
+        {
+            Debug.LogWarning("[03:17] Khong tim thay PlayerHealth0317: ma me khong tru HP.", this);
         }
     }
 }

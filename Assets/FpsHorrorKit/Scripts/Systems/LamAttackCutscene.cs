@@ -71,6 +71,16 @@ namespace FpsHorrorKit
         [SerializeField, Min(0.1f)] private float introLine2Seconds = 3.2f;
         [SerializeField, Min(0.1f)] private float skipHoldSeconds = 1.5f;
 
+        [Header("Voice")]
+        [SerializeField] private AudioSource voiceSource;
+        [SerializeField] private AudioClip introLine1Voice;
+        [SerializeField] private AudioClip introLine2Voice;
+        [SerializeField] private AudioClip chaseLineVoice;
+        [SerializeField] private AudioClip endingLine1Voice;
+        [SerializeField] private AudioClip endingLine2Voice;
+        [SerializeField] private AudioClip endingLine3Voice;
+        [SerializeField, Min(0f)] private float voicePaddingSeconds = .25f;
+
         [Header("Loop 2 Ending Orbit")]
         [SerializeField] private Transform orbitCenter;
         [SerializeField, Min(0.5f)] private float orbitRadius = 3.2f;
@@ -122,6 +132,7 @@ namespace FpsHorrorKit
         private float skipHeldSeconds;
         private bool skipArmed = true;
         private bool skipTriggered;
+        private bool voicePausedForMenu;
 
         public bool IsLoop2Ready { get { return stage == Stage.Loop2; } }
 
@@ -177,6 +188,7 @@ namespace FpsHorrorKit
             lamActor.SetActive(true);
             FaceLamAtPlayer();
             PlaySfx(doorSlamSound);
+            StopVoice();
             stageRoutine = StartCoroutine(IntroductionRoutine());
         }
 
@@ -184,20 +196,24 @@ namespace FpsHorrorKit
         {
             SwitchCamera(lamCloseupCamera);
             SetSubtitle(line1);
-            yield return WaitRealtime(introLine1Seconds);
+            PlayVoice(introLine1Voice);
+            yield return WaitForVoice(introLine1Voice, introLine1Seconds);
             SetSubtitle(line2);
-            yield return WaitRealtime(introLine2Seconds);
+            PlayVoice(introLine2Voice);
+            yield return WaitForVoice(introLine2Voice, introLine2Seconds);
             SwitchCamera(gameplayCamera);
             SetSubtitle(chaseLine);
+            PlayVoice(chaseLineVoice);
             RestoreControls();
             stage = Stage.Chase;
             nextHitTime = Time.unscaledTime + 0.5f;
-            yield return WaitRealtime(2f);
+            yield return WaitForVoice(chaseLineVoice, 2f);
             if (stage == Stage.Chase) SetSubtitle("");
         }
 
         private void Update()
         {
+            SyncVoicePause();
             if (RoomEightMainMenu.IsPauseActive) return;
             UpdateSkipHold();
             if (stage != Stage.Chase || lamActor == null || playerRoot == null) return;
@@ -352,8 +368,19 @@ namespace FpsHorrorKit
                 endingMusic.loop = true;
                 endingMusic.Play();
             }
+            AudioClip[] endingVoices = { endingLine1Voice, endingLine2Voice, endingLine3Voice };
+            string[] endingLines = { endingLine1, endingLine2, endingLine3 };
+            float endingVoiceDuration = 0f;
+            for (int i = 0; i < endingVoices.Length; i++)
+                endingVoiceDuration += VoiceDuration(endingVoices[i], 1.5f);
+            float endingDuration = Mathf.Max(orbitDuration, endingVoiceDuration);
+            int endingLineIndex = 0;
+            float nextEndingLineAt = VoiceDuration(endingVoices[0], 1.5f);
+            SetSubtitle(endingLines[0]);
+            PlayVoice(endingVoices[0]);
+
             float elapsed = 0f;
-            while (elapsed < orbitDuration)
+            while (elapsed < endingDuration)
             {
                 if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
                 elapsed += Time.unscaledDeltaTime;
@@ -364,11 +391,16 @@ namespace FpsHorrorKit
                 endingOrbitCamera.transform.position = center + offset + Vector3.up * orbitHeight;
                 endingOrbitCamera.transform.LookAt(center + Vector3.up * 0.8f);
 
-                if (t < 0.33f) SetSubtitle(endingLine1);
-                else if (t < 0.66f) SetSubtitle(endingLine2);
-                else SetSubtitle(endingLine3);
+                if (endingLineIndex + 1 < endingLines.Length && elapsed >= nextEndingLineAt)
+                {
+                    endingLineIndex++;
+                    SetSubtitle(endingLines[endingLineIndex]);
+                    PlayVoice(endingVoices[endingLineIndex]);
+                    nextEndingLineAt += VoiceDuration(endingVoices[endingLineIndex], 1.5f);
+                }
                 yield return null;
             }
+            StopVoice();
             SetSubtitle("");
             yield return FadeBlack(0f, 1f, 2f);
             if (endingMusic != null) endingMusic.Stop();
@@ -411,6 +443,7 @@ namespace FpsHorrorKit
         private IEnumerator SkipCurrentStage(Stage skippedStage)
         {
             if (sfxSource != null) sfxSource.Stop();
+            StopVoice();
             SetSubtitle("");
             if (skipRoot != null) skipRoot.SetActive(false);
 
@@ -495,6 +528,64 @@ namespace FpsHorrorKit
         private void PlaySfx(AudioClip clip)
         {
             if (sfxSource != null && clip != null) sfxSource.PlayOneShot(clip);
+        }
+
+        private void PlayVoice(AudioClip clip)
+        {
+            if (clip == null)
+            {
+                Debug.LogWarning("[03:17] Lam voice clip is unassigned; using subtitle fallback.", this);
+                return;
+            }
+            if (voiceSource == null)
+            {
+                Debug.LogWarning("[03:17] Lam voice AudioSource is unassigned; using subtitle fallback.", this);
+                return;
+            }
+            voiceSource.Stop();
+            voiceSource.clip = clip;
+            voiceSource.Play();
+        }
+
+        private float VoiceDuration(AudioClip clip, float fallbackSeconds)
+        {
+            return Mathf.Max(fallbackSeconds, clip != null ? clip.length + voicePaddingSeconds : 0f);
+        }
+
+        private IEnumerator WaitForVoice(AudioClip clip, float fallbackSeconds)
+        {
+            float elapsed = 0f;
+            float duration = VoiceDuration(clip, fallbackSeconds);
+            while (elapsed < duration)
+            {
+                if (RoomEightMainMenu.IsPauseActive) { yield return null; continue; }
+                elapsed += Time.unscaledDeltaTime;
+                yield return null;
+            }
+        }
+
+        private void StopVoice()
+        {
+            voicePausedForMenu = false;
+            if (voiceSource != null) voiceSource.Stop();
+        }
+
+        private void SyncVoicePause()
+        {
+            if (voiceSource == null) return;
+            if (RoomEightMainMenu.IsPauseActive)
+            {
+                if (voiceSource.isPlaying)
+                {
+                    voiceSource.Pause();
+                    voicePausedForMenu = true;
+                }
+            }
+            else if (voicePausedForMenu)
+            {
+                voiceSource.UnPause();
+                voicePausedForMenu = false;
+            }
         }
 
         private static IEnumerator WaitRealtime(float seconds)

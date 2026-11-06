@@ -3,123 +3,138 @@ using FpsHorrorKit;
 using UnityEngine;
 using UnityEngine.UI;
 
+// Dat script tren mot GameObject rong o vi tri muon kich hoat jumpscare.
+// Sau khi nguoi choi da tra radio (nhac da bat), den gan se tat nhac,
+// doi mot luc, hien ma + phat tieng het, va tru HP mot lan.
 public class GhostAutoCanvasJumpscare : MonoBehaviour
 {
-    [Header("TARGETS")]
-    [Tooltip("Kéo Player thật (object có PlayerHealth0317) vào đây.")]
+    [Header("PLAYER & GHOST")]
     public GameObject playerObject;
-
-    [Tooltip("Ảnh con ma, import dưới dạng Sprite (2D and UI).")]
     public Sprite ghostSprite;
-
-    [Header("DAMAGE")]
-    [Tooltip("Component máu sẵn có trên Player. Nếu bỏ trống, script sẽ tự tìm từ Player Object.")]
     public PlayerHealth0317 playerHealth;
-
     [Min(1)] public int damageAmount = 10;
 
-    [Header("SETTINGS")]
-    [Min(0.1f)] public float triggerDistance = 1.5f;
-    [Min(0f)] public float delayBeforeShow = 3f;
-    [Min(0.1f)] public float showDuration = 2f;
-    public bool triggerOnlyOnce = true;
+    [Header("JUMPSCARE")]
+    [Min(0.1f)] public float triggerDistance = 2.5f;
+    [Min(0f)] public float delayBeforeShow = 2f;
+    [Min(0.1f)] public float showDuration = 3f;
+
+    [Header("RADIO")]
+    public RadioInspectMusic0317 radioMusic;
+    public AudioSource amThanhPhongAn;
+
+    [Header("GHOST SCREAM")]
+    public AudioClip screamClip;
+    [Range(0f, 1f)] public float screamVolume = 1f;
 
     private bool hasTriggered;
-    private bool isSequenceRunning;
-    private GameObject autoCanvas;
+    private GameObject canvasObject;
+    private AudioSource screamSource;
     private Coroutine sequence;
 
     private void Start()
     {
-        FindPlayerHealth();
-        CreateFullscreenCanvas();
-    }
-
-    private void FindPlayerHealth()
-    {
-        if (playerHealth == null && playerObject != null)
+        if (playerObject != null && playerHealth == null)
         {
             playerHealth = playerObject.GetComponent<PlayerHealth0317>();
             if (playerHealth == null)
                 playerHealth = playerObject.GetComponentInParent<PlayerHealth0317>();
         }
-    }
 
-    private void CreateFullscreenCanvas()
-    {
+        // AudioSource rieng cho tieng het, khong dung AudioSource nhac phong an.
+        screamSource = gameObject.AddComponent<AudioSource>();
+        screamSource.playOnAwake = false;
+        screamSource.loop = false;
+        screamSource.spatialBlend = 0f; // 2D, nghe ro khi hien canvas.
+
         if (ghostSprite == null)
         {
-            Debug.LogError("[03:17] Chưa gán Ghost Sprite cho jumpscare!", this);
+            Debug.LogError("[03:17] Chua gan Ghost Sprite.", this);
             return;
         }
 
-        autoCanvas = new GameObject("AutoJumpscareCanvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-        Canvas canvasComp = autoCanvas.GetComponent<Canvas>();
-        canvasComp.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvasComp.sortingOrder = 999;
+        CreateCanvas();
 
-        GameObject imageObj = new GameObject("GhostImage", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
-        imageObj.transform.SetParent(autoCanvas.transform, false);
+        if (radioMusic == null)
+            Debug.LogWarning("[03:17] Chua gan Radio Music tren radio_low.", this);
+        if (amThanhPhongAn == null)
+            Debug.LogWarning("[03:17] Chua gan AudioSource AmThanhPhongAn.", this);
+    }
 
-        Image imgComp = imageObj.GetComponent<Image>();
-        imgComp.sprite = ghostSprite;
-        imgComp.raycastTarget = false;
+    private void Update()
+    {
+        if (hasTriggered || canvasObject == null || playerObject == null ||
+            radioMusic == null || !radioMusic.HasStarted || Time.timeScale <= 0f)
+            return;
 
-        RectTransform rect = imageObj.GetComponent<RectTransform>();
+        // Chi so khoang cach tren mat phang, tranh lech do chieu cao camera.
+        Vector3 offset = playerObject.transform.position - transform.position;
+        offset.y = 0f;
+        if (offset.sqrMagnitude > triggerDistance * triggerDistance)
+            return;
+
+        hasTriggered = true;
+        sequence = StartCoroutine(JumpscareSequence());
+    }
+
+    private IEnumerator JumpscareSequence()
+    {
+        // Nhac dung ngay khi nguoi choi den gan.
+        if (amThanhPhongAn != null)
+            amThanhPhongAn.Stop();
+        else
+            Debug.LogWarning("[03:17] Khong the tat nhac: chua gan AmThanhPhongAn.", this);
+
+        yield return new WaitForSeconds(delayBeforeShow);
+
+        if (canvasObject != null)
+        {
+            canvasObject.SetActive(true);
+
+            // Tieng ma het phat DUNG LUC canvas xuat hien.
+            if (screamClip != null && screamSource != null)
+                screamSource.PlayOneShot(screamClip, screamVolume);
+
+            if (playerHealth != null)
+                playerHealth.TakeTrapDamage(damageAmount);
+            else
+                Debug.LogWarning("[03:17] Chua gan Player Health, khong tru HP.", this);
+        }
+
+        yield return new WaitForSeconds(showDuration);
+        if (canvasObject != null)
+            canvasObject.SetActive(false);
+        sequence = null;
+    }
+
+    private void CreateCanvas()
+    {
+        canvasObject = new GameObject("AutoJumpscareCanvas", typeof(RectTransform),
+            typeof(Canvas), typeof(CanvasScaler));
+
+        Canvas canvas = canvasObject.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 999;
+
+        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+        GameObject imageObject = new GameObject("GhostImage", typeof(RectTransform),
+            typeof(CanvasRenderer), typeof(Image));
+        imageObject.transform.SetParent(canvasObject.transform, false);
+
+        Image image = imageObject.GetComponent<Image>();
+        image.sprite = ghostSprite;
+        image.raycastTarget = false;
+
+        RectTransform rect = imageObject.GetComponent<RectTransform>();
         rect.anchorMin = Vector2.zero;
         rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
 
-        autoCanvas.SetActive(false);
-    }
-
-    private void Update()
-    {
-        if (playerObject == null || autoCanvas == null) return;
-        if (triggerOnlyOnce && hasTriggered) return;
-        if (isSequenceRunning) return;
-
-        float distance = Vector3.Distance(transform.position, playerObject.transform.position);
-        if (distance <= triggerDistance)
-            sequence = StartCoroutine(JumpscareSequence());
-    }
-
-    private IEnumerator JumpscareSequence()
-    {
-        hasTriggered = true;
-        isSequenceRunning = true;
-
-        yield return new WaitForSeconds(delayBeforeShow);
-
-        autoCanvas.SetActive(true);
-        DealDamageOnceForThisJumpscare();
-        Debug.Log("[03:17] Jumpscare xuất hiện!", this);
-
-        yield return new WaitForSeconds(showDuration);
-
-        autoCanvas.SetActive(false);
-        isSequenceRunning = false;
-        sequence = null;
-    }
-
-    private void DealDamageOnceForThisJumpscare()
-    {
-        FindPlayerHealth();
-        if (playerHealth == null)
-        {
-            Debug.LogWarning("[03:17] Không tìm thấy PlayerHealth0317: jumpscare không trừ HP.", this);
-            return;
-        }
-
-        // Dùng hệ thống HP hiện có, bao gồm miễn sát thương ngắn và xử lý HP = 0.
-        if (playerHealth.TakeTrapDamage(damageAmount))
-            Debug.Log($"[03:17] Jumpscare gây {damageAmount} sát thương.", this);
-    }
-
-    private void OnDestroy()
-    { if (gameObject != null)
-        if (autoCanvas != null) Destroy(autoCanvas);
+        canvasObject.SetActive(false);
     }
 
     private void OnDisable()
@@ -129,7 +144,15 @@ public class GhostAutoCanvasJumpscare : MonoBehaviour
             StopCoroutine(sequence);
             sequence = null;
         }
-        isSequenceRunning = false;
-        if (autoCanvas != null) autoCanvas.SetActive(false);
+        if (canvasObject != null)
+            canvasObject.SetActive(false);
+        if (screamSource != null)
+            screamSource.Stop();
+    }
+
+    private void OnDestroy()
+    {
+        if (canvasObject != null)
+            Destroy(canvasObject);
     }
 }
