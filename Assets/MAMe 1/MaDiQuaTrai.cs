@@ -12,30 +12,25 @@ public class MaDiQuaTrai : MonoBehaviour
     public Transform ghostRoot;
     public Animation ghostAnimation;
 
-    [Header("MIXAMO ANIMATION - LEGACY")]
-    public AnimationClip walkClip;
+    [Header("MIXAMO ANIMATION")]
+    public AnimationClip walkStrafeLeftClip;
     public AnimationClip idleClip;
 
-    [Header("MOVEMENT")]
-    public Transform walkTarget;
-    public float moveSpeed = 1.2f;
+    [Header("DI CHUYEN SANG TRAI")]
     public float walkDistance = 3f;
-    public float stopDistance = 1f;
-    public float arrivalDistance = 0.15f;
-    public float turnSpeed = 6f;
+    public float moveSpeed = 1.2f;
     public float animationSpeed = 1f;
-    public float maxWalkTime = 30f;
 
-    [Header("WALK STRAFE LEFT")]
-    public bool useStrafeLeftAnimation = false;
+    [Header("CHUYEN ANIMATION")]
+    public float transitionTime = 0.25f;
 
-    [Header("TRANSITION")]
-    public float crossFadeTime = 0.25f;
+    [Header("SAU KHI DI CHUYEN")]
     public bool hideAfterWalking = false;
 
-    private bool hasStarted = false;
+    private bool hasTriggered = false;
+    private bool isWalking = false;
 
-    private const string WALK = "Walk";
+    private const string WALK = "WalkStrafeLeft";
     private const string IDLE = "Idle";
 
     private void Awake()
@@ -56,36 +51,33 @@ public class MaDiQuaTrai : MonoBehaviour
 
         ghostAnimation.playAutomatically = false;
 
-        // Tat Animator neu dang su dung Legacy Animation
+        // Tat Animator de tranh xung dot voi Legacy Animation
         Animator[] animators =
             ghostRoot.GetComponentsInChildren<Animator>(true);
 
         foreach (Animator animator in animators)
             animator.enabled = false;
 
-        AddClip(walkClip, WALK, WrapMode.Loop);
-        AddClip(idleClip, IDLE, WrapMode.Loop);
+        RegisterClip(walkStrafeLeftClip, WALK, WrapMode.Loop);
+        RegisterClip(idleClip, IDLE, WrapMode.Loop);
     }
 
     private void Start()
     {
         if (player == null)
         {
-            GameObject obj =
+            GameObject playerObject =
                 GameObject.FindGameObjectWithTag("Player");
 
-            if (obj != null)
-                player = obj.transform;
+            if (playerObject != null)
+                player = playerObject.transform;
         }
 
-        if (idleClip != null &&
-            ghostAnimation[IDLE] != null)
-        {
+        if (ghostAnimation[IDLE] != null)
             ghostAnimation.Play(IDLE);
-        }
     }
 
-    private void AddClip(
+    private void RegisterClip(
         AnimationClip clip,
         string clipName,
         WrapMode mode)
@@ -110,34 +102,52 @@ public class MaDiQuaTrai : MonoBehaviour
 
     private void Update()
     {
-        if (hasStarted || player == null)
+        if (hasTriggered || player == null)
             return;
 
-        Vector3 playerPos = player.position;
-        Vector3 ghostPos = ghostRoot.position;
+        Vector3 playerPosition = player.position;
+        Vector3 ghostPosition = ghostRoot.position;
 
-        playerPos.y = 0f;
-        ghostPos.y = 0f;
+        playerPosition.y = 0f;
+        ghostPosition.y = 0f;
 
-        float distance =
-            Vector3.Distance(playerPos, ghostPos);
+        float distance = Vector3.Distance(
+            playerPosition,
+            ghostPosition
+        );
 
         if (distance <= triggerDistance)
         {
-            hasStarted = true;
-            StartCoroutine(WalkSequence());
+            hasTriggered = true;
+            StartCoroutine(MoveLeft());
         }
     }
 
-    private IEnumerator WalkSequence()
+    private IEnumerator MoveLeft()
     {
         if (ghostAnimation[WALK] == null)
         {
-            Debug.LogError("Chua gan Walk Animation!");
+            Debug.LogError("Chua gan Walk Strafe Left!");
             yield break;
         }
 
-        AnimationState walk = ghostAnimation[WALK];
+        isWalking = true;
+
+        // Luu vi tri va huong ban dau
+        Vector3 startPosition = ghostRoot.position;
+
+        // Tinh vi tri ben trai cua ma
+        Vector3 leftDirection = -ghostRoot.right;
+
+        leftDirection.y = 0f;
+        leftDirection.Normalize();
+
+        Vector3 targetPosition =
+            startPosition + leftDirection * walkDistance;
+
+        // Chay animation di ngang trai
+        AnimationState walk =
+            ghostAnimation[WALK];
 
         walk.time = 0f;
         walk.speed = animationSpeed;
@@ -145,92 +155,35 @@ public class MaDiQuaTrai : MonoBehaviour
 
         ghostAnimation.CrossFade(
             WALK,
-            crossFadeTime
+            transitionTime
         );
 
-        // Luu vi tri va huong ban dau
-        Vector3 startPosition = ghostRoot.position;
-        Quaternion startRotation = ghostRoot.rotation;
-
-        Vector3 fixedTarget;
-
-        if (useStrafeLeftAnimation)
+        // Di chuyen muot sang trai
+        while (Vector3.Distance(
+            ghostRoot.position,
+            targetPosition
+        ) > 0.05f)
         {
-            // Di ngang sang trai theo animation Mixamo
-            fixedTarget =
-                startPosition - startRotation * Vector3.right
-                * walkDistance;
-        }
-        else if (walkTarget != null)
-        {
-            // Di den diem duoc chi dinh
-            fixedTarget = walkTarget.position;
-        }
-        else
-        {
-            // Neu khong co target thi di thang
-            fixedTarget =
-                startPosition + startRotation * Vector3.forward
-                * walkDistance;
-        }
-
-        float timer = 0f;
-
-        while (timer < maxWalkTime)
-        {
-            Vector3 target = followPlayerTarget()
-                ? player.position
-                : fixedTarget;
-
-            target.y = ghostRoot.position.y;
-
-            Vector3 direction =
-                target - ghostRoot.position;
-
-            direction.y = 0f;
-
-            float stopRange = followPlayerTarget()
-                ? stopDistance
-                : arrivalDistance;
-
-            if (direction.magnitude <= stopRange)
-                break;
-
-            // Quay mat theo huong di neu khong strafing
-            if (!useStrafeLeftAnimation)
-            {
-                Quaternion targetRotation =
-                    Quaternion.LookRotation(direction.normalized);
-
-                ghostRoot.rotation = Quaternion.Slerp(
-                    ghostRoot.rotation,
-                    targetRotation,
-                    turnSpeed * Time.deltaTime
-                );
-            }
-
-            // Di chuyen root cua ma
             ghostRoot.position = Vector3.MoveTowards(
                 ghostRoot.position,
-                new Vector3(
-                    target.x,
-                    ghostRoot.position.y,
-                    target.z
-                ),
+                targetPosition,
                 moveSpeed * Time.deltaTime
             );
-
-            timer += Time.deltaTime;
 
             yield return null;
         }
 
-        // Dung lai sau khi di den dich
+        // Dat chinh xac vi tri ket thuc
+        ghostRoot.position = targetPosition;
+
+        isWalking = false;
+
+        // Chuyen sang Idle
         if (ghostAnimation[IDLE] != null)
         {
             ghostAnimation.CrossFade(
                 IDLE,
-                crossFadeTime
+                transitionTime
             );
         }
         else
@@ -238,12 +191,10 @@ public class MaDiQuaTrai : MonoBehaviour
             ghostAnimation.Stop();
         }
 
+        // Tuy chon an ma
         if (hideAfterWalking)
             ghostRoot.gameObject.SetActive(false);
-    }
 
-    private bool followPlayerTarget()
-    {
-        return false;
+        Debug.Log("Ma da di sang trai!");
     }
 }
