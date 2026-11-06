@@ -25429,6 +25429,27 @@ Transform:
   m_Children: []
   m_Father: {fileID: 2001169664}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &599750589 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5319454080310962661, guid: 5969a09a6150aa34c95cd060f82cf711, type: 3}
+  m_PrefabInstance: {fileID: 1067093515}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &599750593
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 599750589}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1d6241146bf884b4aa485d706422c45b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  player: {fileID: 658617851}
+  openingGhost: {fileID: 1936955772}
+  triggerDistance: 3
+  triggerOnlyOnce: 1
 --- !u!1001 &599918045
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -44380,7 +44401,10 @@ PrefabInstance:
     - {fileID: 4051094987133147294, guid: 5969a09a6150aa34c95cd060f82cf711, type: 3}
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5319454080310962661, guid: 5969a09a6150aa34c95cd060f82cf711, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 599750593}
   m_SourcePrefab: {fileID: 100100000, guid: 5969a09a6150aa34c95cd060f82cf711, type: 3}
 --- !u!1001 &1069121429
 PrefabInstance:
@@ -76736,6 +76760,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: Opening
       objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: 61a4a78a1dc723e41947edbd50a48102, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2946127283979886938, guid: 61a4a78a1dc723e41947edbd50a48102, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
@@ -83861,7 +83889,7 @@ MonoBehaviour:
   walkingClip: {fileID: -203655887218126122, guid: ee98378cc3d0f384aa0d6cb0a2e7f200, type: 3}
   idleClip: {fileID: 0}
   pointingSpeed: 1
-  walkSpeed: 2
+  walkSpeed: 20
   stopDistance: 1.2
   turnSpeed: 10
   maxWalkTime: 20
