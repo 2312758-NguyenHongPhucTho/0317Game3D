@@ -3,7 +3,37 @@ guid: 79f5fcc6a50b63e4daa2e3ea4c1e5e89
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Body
+    second: {fileID: 2100000, guid: ea3413fa1a7c417449095e733ee462c9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: BodyMat
+    second: {fileID: 2100000, guid: ea3413fa1a7c417449095e733ee462c9, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Hair
+    second: {fileID: 2100000, guid: ab3ff75365b54b244ae168259dfd21e8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: HairMat
+    second: {fileID: 2100000, guid: ab3ff75365b54b244ae168259dfd21e8, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Top
+    second: {fileID: 2100000, guid: 407f9817bd20625479b3fdb2eb1d2cb7, type: 2}
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: TopsMat
+    second: {fileID: 2100000, guid: 407f9817bd20625479b3fdb2eb1d2cb7, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0

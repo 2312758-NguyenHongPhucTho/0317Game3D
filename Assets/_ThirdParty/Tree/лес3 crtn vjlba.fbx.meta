@@ -19,6 +19,31 @@ ModelImporter:
       assembly: UnityEngine.CoreModule
       name: Material.004
     second: {fileID: 2100000, guid: 03fb570bc48b63e43adfeb3ca19af9fd, type: 2}
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: NormalMap
+    second: {fileID: 2800000, guid: 050eec888828d3040bb2efe120d87b77, type: 3}
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: NormalMap (2)
+    second: {fileID: 2800000, guid: 8c3985908bf5c5b4a8cded3e5b33e449, type: 3}
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: bca9eaed0a17233bdf19af2dec67c1e5
+    second: {fileID: 2800000, guid: 973ea8d4eaf94944fa3a94cf6a01a836, type: 3}
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: "\u0411\u0435\u0437 \u043D\u0430\u0437\u0432\u0430\u043D\u0438\u044F113_20260812112021"
+    second: {fileID: 2800000, guid: 5e96253e844484747b9d91625c890119, type: 3}
+  - first:
+      type: UnityEngine:Texture2D
+      assembly: UnityEngine.CoreModule
+      name: "\u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043D\u043D\u043E\u0435"
+    second: {fileID: 2800000, guid: 68f5839747bbcac48935a40cba79d021, type: 3}
   materials:
     materialImportMode: 2
     materialName: 0
