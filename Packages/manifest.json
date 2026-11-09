@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "com.coplaydev.unity-mcp": "file:com.coplaydev.unity-mcp",
+    "com.unity.2d.sprite": "1.0.0",
     "com.unity.cinemachine": "3.1.2",
     "com.unity.cloud.gltfast": "6.20.0",
     "com.unity.collab-proxy": "2.13.6",
